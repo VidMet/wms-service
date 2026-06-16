@@ -1,18 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trimble Connect MiniMap - WMS Manager</title>
+    <title>Trimble Connect MiniMap - Koordinatstyrt</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+
     <style>
         body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
         #map { flex-grow: 1; width: 100%; }
         #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; }
-        .input-group { margin-bottom: 5px; }
-        input[type="text"] { width: 200px; padding: 4px; }
-        button { padding: 4px 8px; cursor: pointer; }
+        .control-group { margin-bottom: 10px; }
+        select, button { padding: 4px; }
     </style>
 </head>
 <body>
@@ -20,19 +23,52 @@
     <div id="map"></div>
 
     <div id="ui-panel">
-        <strong>Legg til egne WMS-lag:</strong>
-        <div class="input-group">
-            <input type="text" id="wms-url" placeholder="Lim inn WMS URL her...">
-            <input type="text" id="wms-layer" placeholder="Lagnavn (f.eks. 'eiendom')">
-            <button onclick="addCustomWMS()">Legg til i kart</button>
+        <div class="control-group">
+            <strong>Modellens koordinatsystem:</strong>
+            <select id="crs-selector" onchange="updateCRS()">
+                </select>
+        </div>
+        <div class="control-group">
+            <button onclick="simulateTrimbleCameraMoved()">Test: Simuler kamera i 3D</button>
+            <span id="coord-readout" style="margin-left: 10px; color: #555;">Venter på 3D-kamera...</span>
         </div>
     </div>
 
     <script>
-        // 1. Initialiser kartet (Sentrert over Hamar)
-        var map = L.map('map').setView([60.7945, 11.0680], 13);
+        // --- 1. KONFIGURASJON AV KOORDINATSYSTEMER ---
+        // (Dette kan med fordel trekkes ut i en prosjekt-JSON senere)
+        const crsConfig = {
+            "EPSG:25832": {
+                name: "EUREF89 UTM Sone 32N",
+                projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+            },
+            "EPSG:25833": {
+                name: "EUREF89 UTM Sone 33N",
+                projString: "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+            },
+            "EPSG:5105": {
+                name: "NGO1948 / Oslo (Lokal)",
+                projString: "+proj=tmerc +lat_0=58 +lon_0=10.72291666666667 +k=1 +x_0=0 +y_0=0 +ellps=bessel +towgs84=595.48,121.69,515.35,4.115,-2.9383,0.853,-3.408 +units=m +no_defs"
+            }
+        };
 
-        // 2. Definer forhåndsvalgte WMS-tjenester fra Kartverket
+        // Registrer systemene i Proj4
+        for (const [code, data] of Object.entries(crsConfig)) {
+            proj4.defs(code, data.projString);
+        }
+
+        let currentModelCRS = "EPSG:25832"; // Standardvalg
+
+        // --- 2. OPPSETT AV KART OG WMS ---
+        var map = L.map('map').setView([60.7945, 11.0680], 13); // Startvisning
+
+        // OpenStreetMap (Standard)
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        });
+
+        // Kartverket Topo
         var topoKart = L.tileLayer.wms('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
             layers: 'topo4',
             format: 'image/png',
@@ -40,57 +76,62 @@
             attribution: '&copy; Kartverket'
         });
 
-        var grunnKart = L.tileLayer.wms('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
-            layers: 'norges_grunnkart',
-            format: 'image/png',
-            transparent: true,
-            attribution: '&copy; Kartverket'
-        });
+        osmLayer.addTo(map); // Sett OSM som default synlig
 
-        // Sett topoKart som standard aktivt lag
-        topoKart.addTo(map);
-
-        // 3. Sett opp Leaflets innebygde lag-kontroll (Layer Control)
+        // Lagkontroll
         var baseMaps = {
-            "Topografisk Kart": topoKart,
-            "Gråtonekart": grunnKart
+            "OpenStreetMap": osmLayer,
+            "Kartverket Topo4": topoKart
         };
+        L.control.layers(baseMaps, {}).addTo(map);
+
+        // --- 3. UI OG LOGIKK FOR KOORDINATSYSTEM ---
+        const selector = document.getElementById('crs-selector');
+        for (const [code, data] of Object.entries(crsConfig)) {
+            let option = document.createElement('option');
+            option.value = code;
+            option.text = data.name + " (" + code + ")";
+            selector.appendChild(option);
+        }
+
+        function updateCRS() {
+            currentModelCRS = document.getElementById('crs-selector').value;
+            console.log("Byttet modell-CRS til:", currentModelCRS);
+        }
+
+        // --- 4. KONVERTERING OG SYNKRONISERING ---
         
-        var overlayMaps = {}; // Tom foreløpig, her kan vi putte på reguleringsplaner o.l.
+        // Marker i kartet for å vise hvor 3D-kameraet ser
+        var cameraMarker = L.marker([0,0]).addTo(map);
 
-        // Legg kontrollen til oppe i høyre hjørne av kartet
-        var layerControl = L.control.layers(baseMaps, overlayMaps).addTo(map);
-
-        // 4. Funksjon for å la brukeren legge til egne WMS-tjenester
-        function addCustomWMS() {
-            var url = document.getElementById('wms-url').value;
-            var layerName = document.getElementById('wms-layer').value;
-            var displayName = layerName || "Egendefinert Lag"; // Fallback-navn
-
-            if (!url) {
-                alert("Du må fylle inn en WMS-URL.");
-                return;
-            }
-
-            // Opprett det nye WMS-laget
-            var newWmsLayer = L.tileLayer.wms(url, {
-                layers: layerName,
-                format: 'image/png',
-                transparent: true,
-                version: '1.3.0' // Standard WMS-versjon, kan gjøres dynamisk
-            });
-
-            // Legg laget direkte på kartet
-            newWmsLayer.addTo(map);
-
-            // Legg det til som en avhukingsboks i kontrollpanelet under "Overlays"
-            layerControl.addOverlay(newWmsLayer, displayName);
+        /**
+         * Tar inn X og Y fra Trimble Connect og flytter 2D-kartet
+         */
+        function syncMapToTrimbleCamera(modelX, modelY) {
+            // Proj4 konverterer fra valgt system -> WGS84 (EPSG:4326)
+            // Proj4 forventer array [X, Y], og returnerer [Lengdegrad, Breddegrad]
+            const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [modelX, modelY]);
             
-            // Tøm input-feltene
-            document.getElementById('wms-url').value = '';
-            document.getElementById('wms-layer').value = '';
-            
-            console.log("Lagt til WMS:", displayName);
+            const lng = wgs84Coords[0];
+            const lat = wgs84Coords[1];
+
+            // Leaflet forventer [Breddegrad, Lengdegrad]
+            map.flyTo([lat, lng], 16, { animate: true, duration: 0.5 });
+            cameraMarker.setLatLng([lat, lng]);
+
+            document.getElementById('coord-readout').innerText = 
+                `Modell: X=${modelX.toFixed(1)}, Y=${modelY.toFixed(1)} | WGS84: Lat=${lat.toFixed(4)}, Lng=${lng.toFixed(4)}`;
+        }
+
+        /**
+         * Simuleringsfunksjon: Dette er her du senere legger inn event listener 
+         * for Workspace API-et: viewer.on('cameraChanged', (event) => {...})
+         */
+        function simulateTrimbleCameraMoved() {
+            // Fiktive koordinater (F.eks. et kryss på E6 i UTM32N)
+            const mockX = 612500.5; 
+            const mockY = 6741200.8;
+            syncMapToTrimbleCamera(mockX, mockY);
         }
     </script>
 </body>
