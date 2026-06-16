@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.10</span>
+            <span class="version-badge">v1.11</span>
         </div>
 
         <div class="control-group">
@@ -78,7 +78,7 @@
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px; min-height: 40px;">
-            <div id="coord-readout" style="color: #555; font-size: 12px; line-height: 1.4;">Naviger i 3D for å se koordinater...</div>
+            <div id="coord-readout" style="color: #555; font-size: 12px; line-height: 1.4;">Venter på bevegelse i 3D...</div>
         </div>
     </div>
 
@@ -86,7 +86,7 @@
         document.getElementById('map').innerHTML = '';
 
         // --- GLOBALE VARIABLER OG KOORDINATSYSTEMER ---
-        let currentModelCRS = "EPSG:25832"; 
+        let currentModelCRS = "EPSG:5111"; // Setter NTM Sone 11 som standard for Fredrikstad!
         let lastModelX = null, lastModelY = null;
         let map, cameraMarker, layerControl;
 
@@ -104,9 +104,9 @@
         for (const [code, data] of Object.entries(crsConfig)) proj4.defs(code, data.projString);
 
         // --- KARTOPPSETT ---
-        map = L.map('map').setView([60.8, 11.1], 5); 
+        // Justerer start-zoomen litt tettere på
+        map = L.map('map').setView([59.2, 10.9], 15); 
         
-        // Gjør at kartet oppdaterer seg feilfritt når panelet dras i bredden
         const resizeObserver = new ResizeObserver(() => {
             if (map) map.invalidateSize();
         });
@@ -122,7 +122,10 @@
         // --- UI LOGIKK ---
         const selector = document.getElementById('crs-selector');
         for (const [code, data] of Object.entries(crsConfig)) {
-            selector.appendChild(new Option(`${data.name} (${code})`, code));
+            let option = new Option(`${data.name} (${code})`, code);
+            // Sørger for at nedtrekksmenyen faktisk viser NTM Sone 11 ved oppstart
+            if (code === currentModelCRS) option.selected = true;
+            selector.appendChild(option);
         }
 
         function updateCRS() {
@@ -197,22 +200,18 @@
             lastModelX = modelX;
             lastModelY = modelY;
 
-            // Norsk standard: X = Nord, Y = Øst. 
-            // Proj4 krever konsekvent [Øst, Nord] inn i formelen.
-            let projEasting = modelY; 
-            let projNorthing = modelX; 
+            // X fra Trimble Connect er Øst. Y fra Trimble Connect er Nord.
+            // Vi mater dem rett inn i Proj4 uten ombytting.
+            let projEasting = modelX; 
+            let projNorthing = modelY; 
 
             try {
                 const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [projEasting, projNorthing]);
                 map.setView([wgs84Coords[1], wgs84Coords[0]], map.getZoom()); 
                 cameraMarker.setLatLng([wgs84Coords[1], wgs84Coords[0]]);
                 
-                // Beholder utskriften av rådataene hvis vi har aktivert API-feilsøkingen,
-                // ellers viser vi bare den rene posisjonen.
-                if (!document.getElementById('coord-readout').innerHTML.includes("Rådata")) {
-                    document.getElementById('coord-readout').innerHTML = 
-                        `<b>Fra 3D (meter):</b> Nord(X)=${modelX.toFixed(1)}, Øst(Y)=${modelY.toFixed(1)}`;
-                }
+                document.getElementById('coord-readout').innerHTML = 
+                    `<b>Fra 3D (meter):</b> Øst(X)=${modelX.toFixed(1)}, Nord(Y)=${modelY.toFixed(1)}`;
             } catch (error) {
                 console.error("Proj4 konverteringsfeil:", error);
             }
@@ -232,19 +231,14 @@
                     
                     if (event === "viewer.onCameraChanged" || event === "viewer.cameraChanged" || event === "cameraChanged") {
                         
-                        // 1. Trimble pakker nå dataene inn i 'payload.data'
                         const cameraData = payload.data;
-                        
                         if (!cameraData) return;
 
                         const useTarget = document.getElementById('use-target').checked;
-                        
-                        // 2. Senterpunktet heter nå 'lookAt', ikke 'target'
                         const cameraPoint = (useTarget && cameraData.lookAt) ? cameraData.lookAt : cameraData.position;
 
                         if (cameraPoint && cameraPoint.x !== undefined) {
-                            
-                            // 3. SKAL IKKE DELES PÅ 1000. Dataene er allerede i meter.
+                            // Vi vet nå at dataene allerede er i meter!
                             const x_meter = cameraPoint.x;
                             const y_meter = cameraPoint.y;
                             
@@ -255,9 +249,6 @@
                 
                 document.getElementById('api-status').classList.add('connected');
                 document.getElementById('api-text').innerText = "Tilkoblet og synkroniserer!";
-                
-                // Tømmer "Naviger i 3D"-teksten ved første vellykkede signal
-                document.getElementById('coord-readout').innerHTML = "Venter på bevegelse i 3D...";
 
             } catch (error) {
                 console.error("Detaljert API-feil:", error);
