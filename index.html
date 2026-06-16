@@ -36,8 +36,8 @@
 
     <script>
         // --- 1. KONFIGURASJON AV KOORDINATSYSTEMER ---
-        // (Dette kan med fordel trekkes ut i en prosjekt-JSON senere)
         const crsConfig = {
+            // Du kan beholde UTM og lokale systemer som faste definisjoner
             "EPSG:25832": {
                 name: "EUREF89 UTM Sone 32N",
                 projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
@@ -45,12 +45,28 @@
             "EPSG:25833": {
                 name: "EUREF89 UTM Sone 33N",
                 projString: "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-            },
-            "EPSG:5105": {
-                name: "NGO1948 / Oslo (Lokal)",
-                projString: "+proj=tmerc +lat_0=58 +lon_0=10.72291666666667 +k=1 +x_0=0 +y_0=0 +ellps=bessel +towgs84=595.48,121.69,515.35,4.115,-2.9383,0.853,-3.408 +units=m +no_defs"
             }
         };
+
+        // --- NYTT: Generer alle NTM-soner (5 til 30) dynamisk ---
+        function generateNTMZones() {
+            for (let zone = 5; zone <= 30; zone++) {
+                let epsgCode = `EPSG:${5100 + zone}`;
+                let lon0 = zone + 0.5; // Beregn sentralmeridian
+                
+                // Bygg Proj4-strengen for denne sonen
+                let projString = `+proj=tmerc +lat_0=58 +lon_0=${lon0} +k=1 +x_0=100000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
+                
+                // Legg den inn i konfigurasjonsobjektet
+                crsConfig[epsgCode] = {
+                    name: `EUREF89 NTM Sone ${zone}`,
+                    projString: projString
+                };
+            }
+        }
+
+        // Kjør funksjonen for å populere listen før vi registrerer i Proj4js
+        generateNTMZones();
 
         // Registrer systemene i Proj4
         for (const [code, data] of Object.entries(crsConfig)) {
