@@ -41,13 +41,12 @@
     <div id="map">Laster kartbiblioteker...</div>
 
     <div id="ui-panel">
-        
         <div class="header-row">
             <div>
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.8</span>
+            <span class="version-badge">v1.09</span>
         </div>
 
         <div class="control-group">
@@ -78,8 +77,8 @@
             <div id="wfs-status" style="font-size: 11px; color: #666; margin-top: 3px;"></div>
         </div>
 
-        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px;">
-            <div id="coord-readout" style="color: #555; font-size: 12px;">Naviger i 3D for å se koordinater...</div>
+        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px; min-height: 40px;">
+            <div id="coord-readout" style="color: #555; font-size: 12px; line-height: 1.4;">Naviger i 3D for å se koordinater...</div>
         </div>
     </div>
 
@@ -106,6 +105,13 @@
 
         // --- KARTOPPSETT ---
         map = L.map('map').setView([60.8, 11.1], 5); 
+        
+        // Gjør at kartet oppdaterer seg feilfritt når panelet dras i bredden
+        const resizeObserver = new ResizeObserver(() => {
+            if (map) map.invalidateSize();
+        });
+        resizeObserver.observe(document.getElementById('map'));
+
         var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
         
@@ -201,8 +207,12 @@
                 map.setView([wgs84Coords[1], wgs84Coords[0]], map.getZoom()); 
                 cameraMarker.setLatLng([wgs84Coords[1], wgs84Coords[0]]);
                 
-                document.getElementById('coord-readout').innerHTML = 
-                    `<b>Fra 3D (meter):</b> Nord(X)=${modelX.toFixed(1)}, Øst(Y)=${modelY.toFixed(1)}`;
+                // Beholder utskriften av rådataene hvis vi har aktivert API-feilsøkingen,
+                // ellers viser vi bare den rene posisjonen.
+                if (!document.getElementById('coord-readout').innerHTML.includes("Rådata")) {
+                    document.getElementById('coord-readout').innerHTML = 
+                        `<b>Fra 3D (meter):</b> Nord(X)=${modelX.toFixed(1)}, Øst(Y)=${modelY.toFixed(1)}`;
+                }
             } catch (error) {
                 console.error("Proj4 konverteringsfeil:", error);
             }
@@ -217,45 +227,33 @@
 
             try {
                 document.getElementById('api-text').innerText = "Kobler til 3D-motor...";
-                
-                // Sjekker om utvidelsen kjører ulovlig som en lokal fil
-                if (window.location.protocol === 'file:') {
-                    throw new Error("Må kjøres fra en server (localhost), ikke som lokal fil.");
-                }
 
-                // I det nye API-et lytter vi til hendelser HER, inni selve connect-funksjonen
                 const api = await TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
                     
-                    // FEILSØKING: Dette viser det aller siste signalet Trimble sendte rett i panelet!
-                    document.getElementById('coord-readout').innerHTML = `Siste signal: <b>${event}</b>`;
-
-                    // Vi helgarderer oss og sjekker alle kjente varianter av hendelsesnavnet
-                    if (event === "viewer.cameraChanged" || 
-                        event === "viewer.onCameraChanged" || 
-                        event === "cameraChanged" || 
-                        event === "CameraChanged") {
+                    if (event === "viewer.onCameraChanged" || event === "viewer.cameraChanged" || event === "cameraChanged") {
+                        
+                        // FEILSØKING: Vi dumper absolutt all data Trimble sender ut på skjermen!
+                        document.getElementById('coord-readout').innerHTML = 
+                            `Signal: <b>${event}</b><br>` +
+                            `Rådata: <br><span style="font-family:monospace; font-size:10px; color:blue; word-break: break-all;">${JSON.stringify(data)}</span>`;
                         
                         const useTarget = document.getElementById('use-target').checked;
-                        
-                        // Hent posisjon (linsen) eller target (senter i skjermen)
                         const cameraPoint = (useTarget && data.target) ? data.target : data.position;
 
                         if (cameraPoint && cameraPoint.x !== undefined) {
-                            // Konverter fra millimeter til meter for å matche norske koordinatsystemer
                             const x_meter = cameraPoint.x / 1000;
                             const y_meter = cameraPoint.y / 1000;
-                            
                             syncMapToTrimbleCamera(x_meter, y_meter);
                         }
                     }
                 });
                 
                 document.getElementById('api-status').classList.add('connected');
-                document.getElementById('api-text').innerText = "Koblet til! (Beveg musen i 3D)";
+                document.getElementById('api-text').innerText = "Tilkoblet!";
 
             } catch (error) {
                 console.error("Detaljert API-feil:", error);
-                document.getElementById('api-text').innerHTML = `<span style="color:#d8000c; font-size:12px;"><b>Feil:</b> ${error.message || "Tilkobling avvist"}</span>`;
+                document.getElementById('api-text').innerHTML = `<span style="color:#d8000c; font-size:12px;"><b>Feil:</b> ${error.message}</span>`;
             }
         }
 
