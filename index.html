@@ -28,7 +28,7 @@
         .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px; }
         .version-badge { background: #005A9E; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
         .control-group { margin-bottom: 10px; }
-        .input-group { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
+        .input-group { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center;}
         select, button, input[type="text"] { padding: 4px; }
         input[type="text"] { flex-grow: 1; min-width: 120px; }
         label { cursor: pointer; }
@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.14</span>
+            <span class="version-badge">v1.15</span>
         </div>
 
         <div class="control-group">
@@ -72,6 +72,12 @@
             <div class="input-group">
                 <input type="text" id="wfs-url" placeholder="URL...">
                 <input type="text" id="wfs-layer" placeholder="Typenavn (feature)">
+                
+                <select id="wfs-format" style="max-width: 130px;">
+                    <option value="application/json">application/json</option>
+                    <option value="geojson">geojson</option>
+                </select>
+                
                 <button onclick="addCustomWFS()">Legg til</button>
             </div>
             <div id="wfs-status" style="font-size: 11px; color: #666; margin-top: 3px; word-break: break-all;"></div>
@@ -160,11 +166,11 @@
         }
 
         async function addCustomWFS() {
-            // Fjerner evt. query-parametere brukeren har kopiert med fra URLen
             let rawUrl = document.getElementById('wfs-url').value;
             const baseUrl = rawUrl.split('?')[0]; 
             
             const typeName = document.getElementById('wfs-layer').value;
+            const formatStr = document.getElementById('wfs-format').value; // Henter valgt format
             const statusDiv = document.getElementById('wfs-status');
             
             if (!baseUrl || !typeName) return alert("Fyll inn WFS URL og typenavn.");
@@ -172,17 +178,16 @@
             statusDiv.innerHTML = "Laster ned vektordata...";
             statusDiv.style.color = "blue";
 
-            // v1.14: Endret outputFormat til 'geojson' for bredere kompatibilitet med norske servere
-            const wfsRequestUrl = `${baseUrl}?service=WFS&version=1.0.0&request=GetFeature&typeName=${typeName}&outputFormat=geojson&srsName=EPSG:4326`;
+            // Bygger URL med det formatet brukeren valgte i menyen
+            const wfsRequestUrl = `${baseUrl}?service=WFS&version=1.0.0&request=GetFeature&typeName=${typeName}&outputFormat=${encodeURIComponent(formatStr)}&srsName=EPSG:4326`;
 
             try {
                 const response = await fetch(wfsRequestUrl);
                 if (!response.ok) throw new Error(`Server svarte med status ${response.status}`);
                 
-                // Håndterer feil hvis serveren likevel returnerer XML (f.eks. en ren WFS-feilmelding)
                 const contentType = response.headers.get("content-type");
                 if (contentType && contentType.indexOf("xml") !== -1) {
-                    throw new Error("Serveren nektet å levere GeoJSON og returnerte XML. Sjekk typenavn.");
+                    throw new Error("Serveren returnerte XML. Sjekk typenavn eller bytt format i nedtrekksmenyen.");
                 }
 
                 const geoJsonData = await response.json();
@@ -212,7 +217,7 @@
             } catch (error) {
                 console.error("WFS feil:", error);
                 statusDiv.innerHTML = `<b>Feil:</b> Kunne ikke laste/tolke data.<br> 
-                <a href="${wfsRequestUrl}" target="_blank" style="color:red; text-decoration:underline;">Klikk her for å teste lenken i nettleseren</a> for å se feilmeldingen.`;
+                <a href="${wfsRequestUrl}" target="_blank" style="color:red; text-decoration:underline;">Klikk her for å teste lenken i nettleseren</a> for å se serverens svar.`;
                 statusDiv.style.color = "red";
             }
         }
