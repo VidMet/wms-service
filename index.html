@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.09</span>
+            <span class="version-badge">v1.10</span>
         </div>
 
         <div class="control-group">
@@ -228,28 +228,36 @@
             try {
                 document.getElementById('api-text').innerText = "Kobler til 3D-motor...";
 
-                const api = await TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
+                const api = await TrimbleConnectWorkspace.connect(window.parent, (event, payload) => {
                     
                     if (event === "viewer.onCameraChanged" || event === "viewer.cameraChanged" || event === "cameraChanged") {
                         
-                        // FEILSØKING: Vi dumper absolutt all data Trimble sender ut på skjermen!
-                        document.getElementById('coord-readout').innerHTML = 
-                            `Signal: <b>${event}</b><br>` +
-                            `Rådata: <br><span style="font-family:monospace; font-size:10px; color:blue; word-break: break-all;">${JSON.stringify(data)}</span>`;
+                        // 1. Trimble pakker nå dataene inn i 'payload.data'
+                        const cameraData = payload.data;
                         
+                        if (!cameraData) return;
+
                         const useTarget = document.getElementById('use-target').checked;
-                        const cameraPoint = (useTarget && data.target) ? data.target : data.position;
+                        
+                        // 2. Senterpunktet heter nå 'lookAt', ikke 'target'
+                        const cameraPoint = (useTarget && cameraData.lookAt) ? cameraData.lookAt : cameraData.position;
 
                         if (cameraPoint && cameraPoint.x !== undefined) {
-                            const x_meter = cameraPoint.x / 1000;
-                            const y_meter = cameraPoint.y / 1000;
+                            
+                            // 3. SKAL IKKE DELES PÅ 1000. Dataene er allerede i meter.
+                            const x_meter = cameraPoint.x;
+                            const y_meter = cameraPoint.y;
+                            
                             syncMapToTrimbleCamera(x_meter, y_meter);
                         }
                     }
                 });
                 
                 document.getElementById('api-status').classList.add('connected');
-                document.getElementById('api-text').innerText = "Tilkoblet!";
+                document.getElementById('api-text').innerText = "Tilkoblet og synkroniserer!";
+                
+                // Tømmer "Naviger i 3D"-teksten ved første vellykkede signal
+                document.getElementById('coord-readout').innerHTML = "Venter på bevegelse i 3D...";
 
             } catch (error) {
                 console.error("Detaljert API-feil:", error);
