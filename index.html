@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trimble Connect MiniMap - Robust versjon</title>
+    <title>Trimble Connect MiniMap - Sanntidssynkronisering</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
@@ -10,7 +10,7 @@
             const mapDiv = document.getElementById('map');
             if(mapDiv) {
                 mapDiv.innerHTML = `<div style="padding:20px; color:#d8000c; background-color:#ffbaba; font-family:sans-serif; border:1px solid #d8000c; margin:10px;">
-                <b>Kritisk feil oppdaget:</b><br>${msg}<br><em>Sjekk at brannmuren ikke blokkerer eksterne skript.</em></div>`;
+                <b>Feil:</b><br>${msg}</div>`;
             }
             return false;
         };
@@ -18,8 +18,9 @@
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+
+    <script src="https://app.connect.trimble.com/tc/api/2.0/workspace-api.js"></script>
 
     <style>
         body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #fff;}
@@ -30,6 +31,8 @@
         select, button, input[type="text"] { padding: 4px; }
         input[type="text"] { width: 180px; }
         label { cursor: pointer; }
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: red; margin-right: 5px; }
+        .status-dot.connected { background-color: #4CAF50; }
     </style>
 </head>
 <body>
@@ -38,20 +41,28 @@
 
     <div id="ui-panel">
         <div class="control-group">
+            <span id="api-status" class="status-dot"></span>
+            <strong id="api-text">Venter på Trimble Connect API...</strong>
+        </div>
+
+        <div class="control-group">
             <strong>1. Prosjektets koordinatsystem:</strong><br>
-            <select id="crs-selector" onchange="updateCRS()" style="margin-top: 5px; width: 100%; max-width: 300px;">
-                </select>
+            <select id="crs-selector" onchange="updateCRS()" style="margin-top: 5px; width: 100%; max-width: 300px;"></select>
         </div>
         
         <div class="control-group">
             <label>
                 <input type="checkbox" id="swap-xy" onchange="forceSync()"> 
-                <strong>Bytt om X og Y</strong> (Bruk denne hvis kartet havner i feil land)
+                <strong>Bytt om X og Y</strong>
+            </label>
+            <label style="margin-left: 10px;">
+                <input type="checkbox" id="use-target" onchange="forceSync()" checked> 
+                <strong>Bruk siktlinje (senter)</strong> 
             </label>
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
-            <strong>2. Legg til ekstra WMS-lag:</strong>
+            <strong>2. WMS / Ortofoto:</strong>
             <div class="input-group">
                 <input type="text" id="wms-url" placeholder="Lim inn WMS URL...">
                 <input type="text" id="wms-layer" placeholder="Lagnavn">
@@ -59,90 +70,49 @@
             </div>
         </div>
 
-        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding-bottom: 5px; padding-left: 5px;">
-            <button onclick="simulateTrimbleCameraMoved()">Test: Simuler Fredrikstad (Krever NTM11)</button>
-            <div id="coord-readout" style="margin-top: 5px; color: #555; font-size: 12px;">Venter på 3D-kamera...</div>
+        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px;">
+            <div id="coord-readout" style="color: #555; font-size: 12px;">Naviger i 3D for å se koordinater...</div>
         </div>
     </div>
 
     <script>
-        // Sjekk om bibliotekene ble blokkert av brannmuren
-        if (typeof L === 'undefined' || typeof proj4 === 'undefined') {
-            throw new Error("Klarte ikke å laste ned Leaflet eller Proj4js. Er du bak en streng brannmur?");
-        }
-
-        // Tøm "Laster kartbiblioteker..." teksten
         document.getElementById('map').innerHTML = '';
 
-        // ==========================================
-        // 1. GLOBALE VARIABLER FOR TILSTAND
-        // ==========================================
-        let currentModelCRS = "EPSG:25832"; // Standard er UTM32
+        // --- GLOBALE VARIABLER ---
+        let currentModelCRS = "EPSG:25832"; 
         let lastModelX = null;
         let lastModelY = null;
+        let map;
+        let cameraMarker;
 
-        // ==========================================
-        // 2. KOORDINATSYSTEMER (UTM & NTM)
-        // ==========================================
+        // --- KOORDINATSYSTEMER ---
         const crsConfig = {
-            "EPSG:25832": {
-                name: "EUREF89 UTM Sone 32N",
-                projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-            },
-            "EPSG:25833": {
-                name: "EUREF89 UTM Sone 33N",
-                projString: "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-            }
+            "EPSG:25832": { name: "EUREF89 UTM Sone 32N", projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" },
+            "EPSG:25833": { name: "EUREF89 UTM Sone 33N", projString: "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" }
         };
 
-        // Generer NTM Sone 5 til 30
         for (let zone = 5; zone <= 30; zone++) {
-            let epsgCode = `EPSG:${5100 + zone}`;
-            let lon0 = zone + 0.5;
-            crsConfig[epsgCode] = {
+            crsConfig[`EPSG:${5100 + zone}`] = {
                 name: `EUREF89 NTM Sone ${zone}`,
-                projString: `+proj=tmerc +lat_0=58 +lon_0=${lon0} +k=1 +x_0=100000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`
+                projString: `+proj=tmerc +lat_0=58 +lon_0=${zone + 0.5} +k=1 +x_0=100000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`
             };
         }
 
-        // Registrer i Proj4
-        for (const [code, data] of Object.entries(crsConfig)) {
-            proj4.defs(code, data.projString);
-        }
+        for (const [code, data] of Object.entries(crsConfig)) proj4.defs(code, data.projString);
 
-        // ==========================================
-        // 3. KARTOPPSETT
-        // ==========================================
-        var map = L.map('map').setView([60.8, 11.1], 5); 
-
-        var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: 'Tiles &copy; Esri'
-        });
-
-        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap'
-        });
-
+        // --- KARTOPPSETT ---
+        map = L.map('map').setView([60.8, 11.1], 5); 
+        var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+        
         flyfotoLayer.addTo(map);
+        var layerControl = L.control.layers({"Flyfoto": flyfotoLayer, "Vektorkart": osmLayer}, {}).addTo(map);
+        cameraMarker = L.marker([0,0]).addTo(map);
 
-        var baseMaps = {
-            "Flyfoto / Satellitt": flyfotoLayer,
-            "OpenStreetMap (Vektor)": osmLayer
-        };
-        var overlayMaps = {};
-        var layerControl = L.control.layers(baseMaps, overlayMaps).addTo(map);
-
-        // ==========================================
-        // 4. UI OG LOGIKK
-        // ==========================================
+        // --- UI LOGIKK ---
         const selector = document.getElementById('crs-selector');
         for (const [code, data] of Object.entries(crsConfig)) {
-            let option = document.createElement('option');
-            option.value = code;
-            option.text = `${data.name} (${code})`;
-            selector.appendChild(option);
+            selector.appendChild(new Option(`${data.name} (${code})`, code));
         }
 
         function updateCRS() {
@@ -151,40 +121,19 @@
         }
 
         function forceSync() {
-            if (lastModelX !== null && lastModelY !== null) {
-                syncMapToTrimbleCamera(lastModelX, lastModelY);
-            }
+            if (lastModelX !== null && lastModelY !== null) syncMapToTrimbleCamera(lastModelX, lastModelY);
         }
 
         function addCustomWMS() {
             var url = document.getElementById('wms-url').value;
             var layerName = document.getElementById('wms-layer').value;
-            var displayName = layerName || "Egendefinert lag";
-
-            if (!url || !layerName) {
-                alert("Fyll inn både WMS URL og lagnavn.");
-                return;
-            }
-
-            var newWmsLayer = L.tileLayer.wms(url, {
-                layers: layerName,
-                format: 'image/png',
-                transparent: true,
-                version: '1.3.0'
-            });
-
-            newWmsLayer.addTo(map);
-            layerControl.addOverlay(newWmsLayer, displayName);
-
-            document.getElementById('wms-url').value = '';
-            document.getElementById('wms-layer').value = '';
+            if (!url || !layerName) return alert("Fyll inn WMS URL og lagnavn.");
+            var newLayer = L.tileLayer.wms(url, { layers: layerName, format: 'image/png', transparent: true });
+            newLayer.addTo(map);
+            layerControl.addOverlay(newLayer, layerName);
         }
 
-        // ==========================================
-        // 5. SYNKRONISERING (TRIMBLE TIL KART)
-        // ==========================================
-        var cameraMarker = L.marker([0,0]).addTo(map);
-
+        // --- SYNKRONISERING ---
         function syncMapToTrimbleCamera(modelX, modelY) {
             lastModelX = modelX;
             lastModelY = modelY;
@@ -195,26 +144,54 @@
 
             try {
                 const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [projEasting, projNorthing]);
-                const lng = wgs84Coords[0];
-                const lat = wgs84Coords[1];
-
-                map.flyTo([lat, lng], 16, { animate: true, duration: 0.5 });
-                cameraMarker.setLatLng([lat, lng]);
-
+                map.setView([wgs84Coords[1], wgs84Coords[0]], map.getZoom()); // setView er mer responsivt enn flyTo i sanntid
+                cameraMarker.setLatLng([wgs84Coords[1], wgs84Coords[0]]);
+                
                 document.getElementById('coord-readout').innerHTML = 
-                    `<b>Fra 3D:</b> X=${modelX.toFixed(1)}, Y=${modelY.toFixed(1)}<br>` +
-                    `<b>Brukt i utregning:</b> Øst=${projEasting.toFixed(1)}, Nord=${projNorthing.toFixed(1)}`;
+                    `<b>Fra 3D (meter):</b> X=${modelX.toFixed(1)}, Y=${modelY.toFixed(1)}`;
             } catch (error) {
-                console.error("Feil under koordinatkonvertering:", error);
+                console.error("Proj4 konverteringsfeil:", error);
             }
         }
 
-        function simulateTrimbleCameraMoved() {
-            // Disse representerer et anlegg i Fredrikstad der X og Y er byttet om
-            const mockX = 1140000.0; 
-            const mockY = 72000.0;   
-            syncMapToTrimbleCamera(mockX, mockY);
+        // --- TRIMBLE CONNECT INTEGRASJON ---
+        async function initTrimbleConnect() {
+            if (typeof WorkspaceAPI === 'undefined') {
+                document.getElementById('api-text').innerText = "Kjører utenfor Trimble Connect.";
+                return;
+            }
+
+            try {
+                // Opprett og initialiser API-klienten
+                const workspace = new WorkspaceAPI();
+                await workspace.init();
+                
+                // Oppdater UI for å vise suksess
+                document.getElementById('api-status').classList.add('connected');
+                document.getElementById('api-text').innerText = "Koblet til 3D-visningen!";
+
+                // Lytt til kameraendringer
+                workspace.viewer.on('cameraChanged', (event) => {
+                    // Hent riktig punkt basert på sjekkboksen (senter av bildet vs selve kameralinsen)
+                    const useTarget = document.getElementById('use-target').checked;
+                    const cameraPoint = useTarget ? event.target : event.position;
+
+                    // KONVERTER MILLIMETER TIL METER!
+                    const x_meter = cameraPoint.x / 1000;
+                    const y_meter = cameraPoint.y / 1000;
+
+                    syncMapToTrimbleCamera(x_meter, y_meter);
+                });
+
+            } catch (error) {
+                console.error("Klarte ikke koble til Workspace API:", error);
+                document.getElementById('api-text').innerText = "Feil ved tilkobling til 3D-motor.";
+            }
         }
+
+        // Start integrasjonen
+        initTrimbleConnect();
+
     </script>
 </body>
 </html>
