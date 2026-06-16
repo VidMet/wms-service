@@ -10,7 +10,7 @@
             const mapDiv = document.getElementById('map');
             if(mapDiv) {
                 mapDiv.innerHTML = `<div style="padding:20px; color:#d8000c; background-color:#ffbaba; font-family:sans-serif; border:1px solid #d8000c; margin:10px;">
-                <b>Feil:</b><br>${msg}</div>`;
+                <b>Kritisk feil:</b><br>${msg}</div>`;
             }
             return false;
         };
@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.11</span>
+            <span class="version-badge">v1.12</span>
         </div>
 
         <div class="control-group">
@@ -74,7 +74,7 @@
                 <input type="text" id="wfs-layer" placeholder="Typenavn (feature)">
                 <button onclick="addCustomWFS()">Legg til</button>
             </div>
-            <div id="wfs-status" style="font-size: 11px; color: #666; margin-top: 3px;"></div>
+            <div id="wfs-status" style="font-size: 11px; color: #666; margin-top: 3px; word-break: break-all;"></div>
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px; min-height: 40px;">
@@ -86,7 +86,7 @@
         document.getElementById('map').innerHTML = '';
 
         // --- GLOBALE VARIABLER OG KOORDINATSYSTEMER ---
-        let currentModelCRS = "EPSG:5111"; // Setter NTM Sone 11 som standard for Fredrikstad!
+        let currentModelCRS = "EPSG:5111"; 
         let lastModelX = null, lastModelY = null;
         let map, cameraMarker, layerControl;
 
@@ -104,7 +104,6 @@
         for (const [code, data] of Object.entries(crsConfig)) proj4.defs(code, data.projString);
 
         // --- KARTOPPSETT ---
-        // Justerer start-zoomen litt tettere på
         map = L.map('map').setView([59.2, 10.9], 15); 
         
         const resizeObserver = new ResizeObserver(() => {
@@ -123,7 +122,6 @@
         const selector = document.getElementById('crs-selector');
         for (const [code, data] of Object.entries(crsConfig)) {
             let option = new Option(`${data.name} (${code})`, code);
-            // Sørger for at nedtrekksmenyen faktisk viser NTM Sone 11 ved oppstart
             if (code === currentModelCRS) option.selected = true;
             selector.appendChild(option);
         }
@@ -142,7 +140,15 @@
             var layerName = document.getElementById('wms-layer').value;
             if (!url || !layerName) return alert("Fyll inn WMS URL og lagnavn.");
             
-            var newLayer = L.tileLayer.wms(url, { layers: layerName, format: 'image/png', transparent: true });
+            // v1.12: Tvinger WMS 1.3.0 og eksplisitt EPSG:3857 støtte.
+            var newLayer = L.tileLayer.wms(url, { 
+                layers: layerName, 
+                format: 'image/png', 
+                transparent: true,
+                version: '1.3.0',
+                crs: L.CRS.EPSG3857 
+            });
+            
             newLayer.addTo(map);
             layerControl.addOverlay(newLayer, layerName + " (WMS)");
         }
@@ -154,15 +160,19 @@
             
             if (!baseUrl || !typeName) return alert("Fyll inn WFS URL og typenavn.");
 
-            statusDiv.innerText = "Laster ned vektordata...";
+            statusDiv.innerHTML = "Laster ned vektordata...";
             statusDiv.style.color = "blue";
 
             const separator = baseUrl.includes('?') ? '&' : '?';
+            // v1.12: Bruker et bredere WFS-oppsett. Prøver først standard application/json
             const wfsRequestUrl = `${baseUrl}${separator}service=WFS&version=1.0.0&request=GetFeature&typeName=${typeName}&outputFormat=application/json&srsName=EPSG:4326`;
 
             try {
                 const response = await fetch(wfsRequestUrl);
-                if (!response.ok) throw new Error(`Server svarte med status ${response.status}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Server svarte med status ${response.status}`);
+                }
                 
                 const geoJsonData = await response.json();
 
@@ -190,7 +200,9 @@
 
             } catch (error) {
                 console.error("WFS feil:", error);
-                statusDiv.innerText = "Feil: Klarte ikke hente data. Sjekk URL eller typenavn.";
+                // v1.12: Spytter ut den nøyaktige URLen slik at du kan teste den manuelt
+                statusDiv.innerHTML = `<b>Feil:</b> Klarte ikke hente data. Det kan være en CORS-blokkering eller formatfeil. <br><br>
+                <a href="${wfsRequestUrl}" target="_blank" style="color:red; text-decoration:underline;">Klikk her for å teste lenken direkte i nettleseren</a> for å se serverens feilmelding.`;
                 statusDiv.style.color = "red";
             }
         }
@@ -200,8 +212,6 @@
             lastModelX = modelX;
             lastModelY = modelY;
 
-            // X fra Trimble Connect er Øst. Y fra Trimble Connect er Nord.
-            // Vi mater dem rett inn i Proj4 uten ombytting.
             let projEasting = modelX; 
             let projNorthing = modelY; 
 
@@ -238,10 +248,8 @@
                         const cameraPoint = (useTarget && cameraData.lookAt) ? cameraData.lookAt : cameraData.position;
 
                         if (cameraPoint && cameraPoint.x !== undefined) {
-                            // Vi vet nå at dataene allerede er i meter!
                             const x_meter = cameraPoint.x;
                             const y_meter = cameraPoint.y;
-                            
                             syncMapToTrimbleCamera(x_meter, y_meter);
                         }
                     }
