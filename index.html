@@ -1,19 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trimble Connect MiniMap - NTM & Flyfoto</title>
+    <title>Trimble Connect MiniMap - Robust versjon</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            const mapDiv = document.getElementById('map');
+            if(mapDiv) {
+                mapDiv.innerHTML = `<div style="padding:20px; color:#d8000c; background-color:#ffbaba; font-family:sans-serif; border:1px solid #d8000c; margin:10px;">
+                <b>Kritisk feil oppdaget:</b><br>${msg}<br><em>Sjekk at brannmuren ikke blokkerer eksterne skript.</em></div>`;
+            }
+            return false;
+        };
+    </script>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-        #map { flex-grow: 1; width: 100%; }
-        #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; overflow-y: auto; }
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #fff;}
+        #map { flex-grow: 1; width: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #666; }
+        #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; overflow-y: auto; flex-shrink: 0; }
         .control-group { margin-bottom: 10px; }
         .input-group { margin-top: 5px; }
         select, button, input[type="text"] { padding: 4px; }
@@ -23,7 +34,7 @@
 </head>
 <body>
 
-    <div id="map"></div>
+    <div id="map">Laster kartbiblioteker...</div>
 
     <div id="ui-panel">
         <div class="control-group">
@@ -35,7 +46,7 @@
         <div class="control-group">
             <label>
                 <input type="checkbox" id="swap-xy" onchange="forceSync()"> 
-                <strong>Bytt om X og Y</strong> (Bruk denne hvis kartet havner i feil land/akse)
+                <strong>Bytt om X og Y</strong> (Bruk denne hvis kartet havner i feil land)
             </label>
         </div>
 
@@ -48,13 +59,21 @@
             </div>
         </div>
 
-        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef;">
-            <button onclick="simulateTrimbleCameraMoved()">Test: Simuler Fredrikstad (NTM11)</button>
+        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding-bottom: 5px; padding-left: 5px;">
+            <button onclick="simulateTrimbleCameraMoved()">Test: Simuler Fredrikstad (Krever NTM11)</button>
             <div id="coord-readout" style="margin-top: 5px; color: #555; font-size: 12px;">Venter på 3D-kamera...</div>
         </div>
     </div>
 
     <script>
+        // Sjekk om bibliotekene ble blokkert av brannmuren
+        if (typeof L === 'undefined' || typeof proj4 === 'undefined') {
+            throw new Error("Klarte ikke å laste ned Leaflet eller Proj4js. Er du bak en streng brannmur?");
+        }
+
+        // Tøm "Laster kartbiblioteker..." teksten
+        document.getElementById('map').innerHTML = '';
+
         // ==========================================
         // 1. GLOBALE VARIABLER FOR TILSTAND
         // ==========================================
@@ -94,16 +113,13 @@
         // ==========================================
         // 3. KARTOPPSETT
         // ==========================================
-        // Starter i Norge, zoomet ut
         var map = L.map('map').setView([60.8, 11.1], 5); 
 
-        // Esri Flyfoto
         var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             maxZoom: 19,
             attribution: 'Tiles &copy; Esri'
         });
 
-        // OpenStreetMap
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; OpenStreetMap'
@@ -121,8 +137,6 @@
         // ==========================================
         // 4. UI OG LOGIKK
         // ==========================================
-        
-        // Fyll nedtrekksmenyen
         const selector = document.getElementById('crs-selector');
         for (const [code, data] of Object.entries(crsConfig)) {
             let option = document.createElement('option');
@@ -136,7 +150,6 @@
             forceSync();
         }
 
-        // Tvinger en ny utregning hvis man bytter koordinatsystem eller krysser av X/Y-boksen
         function forceSync() {
             if (lastModelX !== null && lastModelY !== null) {
                 syncMapToTrimbleCamera(lastModelX, lastModelY);
@@ -173,24 +186,18 @@
         var cameraMarker = L.marker([0,0]).addTo(map);
 
         function syncMapToTrimbleCamera(modelX, modelY) {
-            // Lagre posisjonen for senere bruk
             lastModelX = modelX;
             lastModelY = modelY;
 
-            // Hent verdien fra avhukingsboksen
             const swapXY = document.getElementById('swap-xy').checked;
-            
-            // Bestem hva som skal mates inn i Proj4 basert på avhukingsboksen
             let projEasting = swapXY ? modelY : modelX;
             let projNorthing = swapXY ? modelX : modelY;
 
             try {
-                // Konvertering
                 const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [projEasting, projNorthing]);
                 const lng = wgs84Coords[0];
                 const lat = wgs84Coords[1];
 
-                // Flytt kart og markør
                 map.flyTo([lat, lng], 16, { animate: true, duration: 0.5 });
                 cameraMarker.setLatLng([lat, lng]);
 
@@ -202,16 +209,10 @@
             }
         }
 
-        // Testfunksjon satt opp med koordinater for Fredrikstad-området i NTM Sone 11
         function simulateTrimbleCameraMoved() {
-            // Husk å velge "EUREF89 NTM Sone 11" i nedtrekksmenyen før du trykker!
-            // Dette er realistiske verdier for Fredrikstad:
-            // Nord ≈ 1133000, Øst ≈ 66000
-            
-            // Hvis modellen din har byttet om aksene, vil X være stor og Y være liten:
-            const mockX = 1133500.0; // Feilaktig X (Egentlig Nord)
-            const mockY = 66500.0;   // Feilaktig Y (Egentlig Øst)
-            
+            // Disse representerer et anlegg i Fredrikstad der X og Y er byttet om
+            const mockX = 1133500.0; 
+            const mockY = 66500.0;   
             syncMapToTrimbleCamera(mockX, mockY);
         }
     </script>
