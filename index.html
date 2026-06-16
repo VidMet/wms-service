@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trimble Connect MiniMap - WMS Manager</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+        #map { flex-grow: 1; width: 100%; }
+        #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; }
+        .input-group { margin-bottom: 5px; }
+        input[type="text"] { width: 200px; padding: 4px; }
+        button { padding: 4px 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div id="ui-panel">
+        <strong>Legg til egne WMS-lag:</strong>
+        <div class="input-group">
+            <input type="text" id="wms-url" placeholder="Lim inn WMS URL her...">
+            <input type="text" id="wms-layer" placeholder="Lagnavn (f.eks. 'eiendom')">
+            <button onclick="addCustomWMS()">Legg til i kart</button>
+        </div>
+    </div>
+
+    <script>
+        // 1. Initialiser kartet (Sentrert over Hamar)
+        var map = L.map('map').setView([60.7945, 11.0680], 13);
+
+        // 2. Definer forhåndsvalgte WMS-tjenester fra Kartverket
+        var topoKart = L.tileLayer.wms('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
+            layers: 'topo4',
+            format: 'image/png',
+            transparent: true,
+            attribution: '&copy; Kartverket'
+        });
+
+        var grunnKart = L.tileLayer.wms('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
+            layers: 'norges_grunnkart',
+            format: 'image/png',
+            transparent: true,
+            attribution: '&copy; Kartverket'
+        });
+
+        // Sett topoKart som standard aktivt lag
+        topoKart.addTo(map);
+
+        // 3. Sett opp Leaflets innebygde lag-kontroll (Layer Control)
+        var baseMaps = {
+            "Topografisk Kart": topoKart,
+            "Gråtonekart": grunnKart
+        };
+        
+        var overlayMaps = {}; // Tom foreløpig, her kan vi putte på reguleringsplaner o.l.
+
+        // Legg kontrollen til oppe i høyre hjørne av kartet
+        var layerControl = L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+        // 4. Funksjon for å la brukeren legge til egne WMS-tjenester
+        function addCustomWMS() {
+            var url = document.getElementById('wms-url').value;
+            var layerName = document.getElementById('wms-layer').value;
+            var displayName = layerName || "Egendefinert Lag"; // Fallback-navn
+
+            if (!url) {
+                alert("Du må fylle inn en WMS-URL.");
+                return;
+            }
+
+            // Opprett det nye WMS-laget
+            var newWmsLayer = L.tileLayer.wms(url, {
+                layers: layerName,
+                format: 'image/png',
+                transparent: true,
+                version: '1.3.0' // Standard WMS-versjon, kan gjøres dynamisk
+            });
+
+            // Legg laget direkte på kartet
+            newWmsLayer.addTo(map);
+
+            // Legg det til som en avhukingsboks i kontrollpanelet under "Overlays"
+            layerControl.addOverlay(newWmsLayer, displayName);
+            
+            // Tøm input-feltene
+            document.getElementById('wms-url').value = '';
+            document.getElementById('wms-layer').value = '';
+            
+            console.log("Lagt til WMS:", displayName);
+        }
+    </script>
+</body>
+</html>
