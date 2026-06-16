@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.16</span>
+            <span class="version-badge">v1.17</span>
         </div>
 
         <div class="control-group">
@@ -149,7 +149,6 @@
         }
 
         function addCustomWMS() {
-            // Vasker URL automatisk for WMS også
             let rawUrl = document.getElementById('wms-url').value.trim();
             const baseUrl = rawUrl.split('?')[0];
 
@@ -169,7 +168,6 @@
         }
 
         async function addCustomWFS() {
-            // v1.16: Vasker WFS URL automatisk for å unngå parameter-kræsj
             let rawUrl = document.getElementById('wfs-url').value.trim();
             const baseUrl = rawUrl.split('?')[0]; 
             
@@ -186,15 +184,26 @@
 
             try {
                 const response = await fetch(wfsRequestUrl);
-                if (!response.ok) throw new Error(`Server svarte med status ${response.status}`);
+                if (!response.ok) throw new Error(`Server svarte med feilkode ${response.status}`);
                 
-                // v1.16: GML-skjold. Stopper prosessen pent hvis serveren bare leverer GML/XML
-                const contentType = response.headers.get("content-type");
-                if (contentType && (contentType.includes("xml") || contentType.includes("gml"))) {
-                    throw new Error("Serveren leverer kun GML/XML. Dette formatet støttes ikke for vektordata i nettleseren. Bruk funksjonen 'Legg til WMS (Bilde)' i stedet.");
+                // v1.17: Vi laster ned dataene som ren tekst først, for å unngå JSON-krasj
+                const responseText = await response.text();
+                
+                let geoJsonData;
+                try {
+                    // Prøver å tolke teksten som JSON
+                    geoJsonData = JSON.parse(responseText);
+                } catch (parseError) {
+                    // Hvis teksten ikke er gyldig JSON (f.eks starter med Content-Type eller <xml), lander vi her
+                    if (responseText.includes("ServiceExceptionReport") || responseText.includes("xml")) {
+                        throw new Error("Serveren returnerte en XML-feilmelding. Sjekk typenavn eller at den støtter GeoJSON.");
+                    } else if (responseText.includes("Content-Type")) {
+                        throw new Error("Kartserveren har en oppsettsfeil (lekker headere). Bruk WMS i stedet for WFS for denne serveren.");
+                    } else {
+                        // Viser de første 40 tegnene av det serveren faktisk sendte
+                        throw new Error(`Mottok ugyldig data fra serveren: "${responseText.substring(0, 40)}..."`);
+                    }
                 }
-
-                const geoJsonData = await response.json();
 
                 const wfsLayer = L.geoJSON(geoJsonData, {
                     style: function (feature) {
@@ -220,8 +229,8 @@
 
             } catch (error) {
                 console.error("WFS feil:", error);
-                // Viser den nøyaktige feilmeldingen for GML-avvisning
-                statusDiv.innerHTML = `<b>Feil:</b> ${error.message}`;
+                statusDiv.innerHTML = `<b>Feil:</b> ${error.message} <br>
+                <a href="${wfsRequestUrl}" target="_blank" style="color:red; text-decoration:underline;">Test lenken i nettleseren for detaljer</a>`;
                 statusDiv.style.color = "red";
             }
         }
