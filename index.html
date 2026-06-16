@@ -47,7 +47,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.6</span>
+            <span class="version-badge">v1.7</span>
         </div>
 
         <div class="control-group">
@@ -211,37 +211,38 @@
         // --- TRIMBLE CONNECT INTEGRASJON ---
         async function initTrimbleConnect() {
             if (typeof TrimbleConnectWorkspace === 'undefined') {
-                document.getElementById('api-text').innerText = "Kjører utenfor Trimble Connect.";
+                document.getElementById('api-text').innerHTML = "<span style='color:red'>API-skriptet ble ikke lastet ned.</span>";
                 return;
             }
 
             try {
-                // 1. Koble til API-et og lagre referansen i variabelen 'api'
+                document.getElementById('api-text').innerText = "Forsøker å koble til API...";
+                
+                // Sjekk om vi kjører som ren fil (file://), noe som blokkerer API-et
+                if (window.location.protocol === 'file:') {
+                    throw new Error("Sikkerhetsblokkering: Utvidelsen kan ikke kjøres direkte fra en lokal fil. Den må hostes på en server (f.eks. localhost).");
+                }
+
                 const api = await TrimbleConnectWorkspace.connect(window.parent);
                 
                 document.getElementById('api-status').classList.add('connected');
                 document.getElementById('api-text').innerText = "Koblet til 3D-visningen!";
 
-                // 2. Sett opp lytteren med riktig syntaks for det nye API-et
                 api.viewer.onCameraChanged.addEventListener((cameraData) => {
-                    
                     const useTarget = document.getElementById('use-target').checked;
-                    
-                    // Det nye API-et returnerer et objekt som inneholder 'position' og 'target'
                     const cameraPoint = (useTarget && cameraData.target) ? cameraData.target : cameraData.position;
 
                     if (cameraPoint && cameraPoint.x !== undefined) {
-                        // Trimble regner i millimeter, konverter til meter
                         const x_meter = cameraPoint.x / 1000;
                         const y_meter = cameraPoint.y / 1000;
-                        
                         syncMapToTrimbleCamera(x_meter, y_meter);
                     }
                 });
 
             } catch (error) {
-                console.error("Klarte ikke koble til Workspace API:", error);
-                document.getElementById('api-text').innerText = "Feil ved tilkobling til 3D-motor.";
+                console.error("Detaljert API-feil:", error);
+                // Tving den eksakte feilmeldingen ut i grensesnittet
+                document.getElementById('api-text').innerHTML = `<span style="color:#d8000c; font-size:12px;"><b>Feil:</b> ${error.message || "Tilkobling tidsavbrutt/avvist av Trimble"}</span>`;
             }
         }
 
