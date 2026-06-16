@@ -20,7 +20,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 
-    <script src="https://app.connect.trimble.com/tc/api/2.0/workspace-api.js"></script>
+    <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
 
     <style>
         body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #fff;}
@@ -144,7 +144,7 @@
 
             try {
                 const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [projEasting, projNorthing]);
-                map.setView([wgs84Coords[1], wgs84Coords[0]], map.getZoom()); // setView er mer responsivt enn flyTo i sanntid
+                map.setView([wgs84Coords[1], wgs84Coords[0]], map.getZoom()); 
                 cameraMarker.setLatLng([wgs84Coords[1], wgs84Coords[0]]);
                 
                 document.getElementById('coord-readout').innerHTML = 
@@ -156,32 +156,37 @@
 
         // --- TRIMBLE CONNECT INTEGRASJON ---
         async function initTrimbleConnect() {
-            if (typeof WorkspaceAPI === 'undefined') {
-                document.getElementById('api-text').innerText = "Kjører utenfor Trimble Connect.";
+            // Sjekk om det nye API-objektet er tilgjengelig
+            if (typeof TrimbleConnectWorkspace === 'undefined') {
+                document.getElementById('api-text').innerText = "Kjører utenfor Trimble Connect (API mangler).";
                 return;
             }
 
             try {
-                // Opprett og initialiser API-klienten
-                const workspace = new WorkspaceAPI();
-                await workspace.init();
+                // Koble til parent-vinduet (selve Trimble Connect-rammen) og lytt på hendelser
+                const workspaceAPI = await TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
+                    
+                    // Vi er kun interessert i hendelsen når kameraet flytter seg
+                    if (event === "viewer.onCameraChanged") {
+                        
+                        const useTarget = document.getElementById('use-target').checked;
+                        
+                        // Trimble sender posisjon (kameralinsen) og target (senter i bildet/siktlinjen)
+                        const cameraPoint = (useTarget && data.target) ? data.target : data.position;
+
+                        if (cameraPoint && cameraPoint.x !== undefined) {
+                            // KONVERTER MILLIMETER TIL METER
+                            const x_meter = cameraPoint.x / 1000;
+                            const y_meter = cameraPoint.y / 1000;
+
+                            syncMapToTrimbleCamera(x_meter, y_meter);
+                        }
+                    }
+                });
                 
-                // Oppdater UI for å vise suksess
+                // Oppdater UI for å vise at vi har signal
                 document.getElementById('api-status').classList.add('connected');
                 document.getElementById('api-text').innerText = "Koblet til 3D-visningen!";
-
-                // Lytt til kameraendringer
-                workspace.viewer.on('cameraChanged', (event) => {
-                    // Hent riktig punkt basert på sjekkboksen (senter av bildet vs selve kameralinsen)
-                    const useTarget = document.getElementById('use-target').checked;
-                    const cameraPoint = useTarget ? event.target : event.position;
-
-                    // KONVERTER MILLIMETER TIL METER!
-                    const x_meter = cameraPoint.x / 1000;
-                    const y_meter = cameraPoint.y / 1000;
-
-                    syncMapToTrimbleCamera(x_meter, y_meter);
-                });
 
             } catch (error) {
                 console.error("Klarte ikke koble til Workspace API:", error);
