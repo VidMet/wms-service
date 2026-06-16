@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trimble Connect MiniMap - Sanntid + WMS/WFS</title>
+    <title>Trimble Connect MiniMap</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
@@ -25,6 +25,8 @@
         body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #fff;}
         #map { flex-grow: 1; width: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #666; }
         #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; overflow-y: auto; flex-shrink: 0; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px; }
+        .version-badge { background: #005A9E; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
         .control-group { margin-bottom: 10px; }
         .input-group { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
         select, button, input[type="text"] { padding: 4px; }
@@ -39,9 +41,13 @@
     <div id="map">Laster kartbiblioteker...</div>
 
     <div id="ui-panel">
-        <div class="control-group">
-            <span id="api-status" class="status-dot"></span>
-            <strong id="api-text">Venter på Trimble Connect API...</strong>
+        
+        <div class="header-row">
+            <div>
+                <span id="api-status" class="status-dot"></span>
+                <strong id="api-text">Venter på Trimble API...</strong>
+            </div>
+            <span class="version-badge">v1.5</span>
         </div>
 
         <div class="control-group">
@@ -50,8 +56,7 @@
         </div>
         
         <div class="control-group">
-            <label><input type="checkbox" id="swap-xy" onchange="forceSync()"> <strong>Bytt om X og Y</strong></label>
-            <label style="margin-left: 10px;"><input type="checkbox" id="use-target" onchange="forceSync()" checked> <strong>Bruk siktlinje (senter)</strong></label>
+            <label><input type="checkbox" id="use-target" onchange="forceSync()" checked> <strong>Bruk siktlinje (senter)</strong></label>
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
@@ -133,7 +138,6 @@
             layerControl.addOverlay(newLayer, layerName + " (WMS)");
         }
 
-        // --- NY WFS LOGIKK ---
         async function addCustomWFS() {
             const baseUrl = document.getElementById('wfs-url').value;
             const typeName = document.getElementById('wfs-layer').value;
@@ -144,8 +148,6 @@
             statusDiv.innerText = "Laster ned vektordata...";
             statusDiv.style.color = "blue";
 
-            // Bygger en WFS-spørring som ber om data i GeoJSON-format satt til WGS84 (EPSG:4326)
-            // Merk at ? eller & avhenger av om URLen allerede har parametere
             const separator = baseUrl.includes('?') ? '&' : '?';
             const wfsRequestUrl = `${baseUrl}${separator}service=WFS&version=1.0.0&request=GetFeature&typeName=${typeName}&outputFormat=application/json&srsName=EPSG:4326`;
 
@@ -155,13 +157,11 @@
                 
                 const geoJsonData = await response.json();
 
-                // Legger til dataen i kartet med en funksjon som lager popups
                 const wfsLayer = L.geoJSON(geoJsonData, {
                     style: function (feature) {
-                        return { color: "#ff7800", weight: 2, opacity: 0.8 }; // Standard stil for WFS-geometri
+                        return { color: "#ff7800", weight: 2, opacity: 0.8 }; 
                     },
                     onEachFeature: function (feature, layer) {
-                        // Bygger et dynamisk sprettoppvindu basert på alle egenskapene (properties) til objektet
                         if (feature.properties) {
                             let popupContent = "<div style='max-height: 200px; overflow-y: auto;'><b>Egenskaper:</b><br>";
                             for (let key in feature.properties) {
@@ -181,7 +181,7 @@
 
             } catch (error) {
                 console.error("WFS feil:", error);
-                statusDiv.innerText = "Feil: Klarte ikke hente data. Sjekk URL, typenavn eller CORS-blokkering.";
+                statusDiv.innerText = "Feil: Klarte ikke hente data. Sjekk URL eller typenavn.";
                 statusDiv.style.color = "red";
             }
         }
@@ -191,9 +191,10 @@
             lastModelX = modelX;
             lastModelY = modelY;
 
-            const swapXY = document.getElementById('swap-xy').checked;
-            let projEasting = swapXY ? modelY : modelX;
-            let projNorthing = swapXY ? modelX : modelY;
+            // Norsk standard: X = Nord, Y = Øst. 
+            // Proj4 krever konsekvent [Øst, Nord] inn i formelen.
+            let projEasting = modelY; 
+            let projNorthing = modelX; 
 
             try {
                 const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [projEasting, projNorthing]);
@@ -201,7 +202,7 @@
                 cameraMarker.setLatLng([wgs84Coords[1], wgs84Coords[0]]);
                 
                 document.getElementById('coord-readout').innerHTML = 
-                    `<b>Fra 3D (meter):</b> X=${modelX.toFixed(1)}, Y=${modelY.toFixed(1)}`;
+                    `<b>Fra 3D (meter):</b> Nord(X)=${modelX.toFixed(1)}, Øst(Y)=${modelY.toFixed(1)}`;
             } catch (error) {
                 console.error("Proj4 konverteringsfeil:", error);
             }
