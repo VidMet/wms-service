@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.18</span>
+            <span class="version-badge">v1.19</span>
         </div>
 
         <div class="control-group">
@@ -59,25 +59,13 @@
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
-            <strong>2. Legg til eksternt kartlag:</strong>
-            
-            <div class="input-group" style="margin-bottom: 5px;">
-                <select id="layer-type" onchange="toggleLayerType()" style="flex-grow: 1;">
-                    <option value="WMS">WMS (Bilde)</option>
-                    <option value="WFS">WFS (Vektordata)</option>
-                </select>
-                <select id="layer-format" style="display: none; max-width: 120px;">
-                    <option value="application/json">app/json</option>
-                    <option value="geojson">geojson</option>
-                </select>
-            </div>
-            
+            <strong>2. Legg til WMS (Kartbilde):</strong>
             <div class="input-group">
-                <input type="text" id="layer-url" placeholder="Lim inn URL...">
-                <input type="text" id="layer-name" placeholder="Lagnavn / Typenavn">
-                <button onclick="addCustomLayer()">Legg til</button>
+                <input type="text" id="wms-url" placeholder="Lim inn URL...">
+                <input type="text" id="wms-layer" placeholder="Lagnavn">
+                <button onclick="addCustomWMS()">Legg til</button>
             </div>
-            <div id="layer-status" style="font-size: 11px; color: #666; margin-top: 3px; word-break: break-all;"></div>
+            <div id="wms-status" style="font-size: 11px; color: #666; margin-top: 3px; word-break: break-all;"></div>
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
@@ -145,105 +133,38 @@
             if (lastModelX !== null && lastModelY !== null) syncMapToTrimbleCamera(lastModelX, lastModelY);
         }
 
-        // --- NY KOMBINERT LAYER-LOGIKK ---
-        function toggleLayerType() {
-            const type = document.getElementById('layer-type').value;
-            const formatSelect = document.getElementById('layer-format');
-            if (type === 'WFS') {
-                formatSelect.style.display = 'inline-block';
-            } else {
-                formatSelect.style.display = 'none';
-            }
-        }
-
-        async function addCustomLayer() {
-            const type = document.getElementById('layer-type').value;
-            const rawUrl = document.getElementById('layer-url').value.trim();
+        function addCustomWMS() {
+            let rawUrl = document.getElementById('wms-url').value.trim();
             const baseUrl = rawUrl.split('?')[0]; 
-            const layerName = document.getElementById('layer-name').value.trim();
-            const statusDiv = document.getElementById('layer-status');
+            const layerName = document.getElementById('wms-layer').value.trim();
+            const statusDiv = document.getElementById('wms-status');
 
             if (!baseUrl || !layerName) {
-                alert("Fyll inn URL og lagnavn/typenavn.");
+                alert("Fyll inn WMS URL og lagnavn.");
                 return;
             }
 
-            if (type === 'WMS') {
-                try {
-                    statusDiv.innerHTML = "Legger til WMS...";
-                    statusDiv.style.color = "blue";
-
-                    var newLayer = L.tileLayer.wms(baseUrl, { 
-                        layers: layerName, 
-                        format: 'image/png', 
-                        transparent: true,
-                        version: '1.3.0',
-                        crs: L.CRS.EPSG3857 
-                    });
-                    
-                    newLayer.addTo(map);
-                    layerControl.addOverlay(newLayer, layerName + " (WMS)");
-
-                    statusDiv.innerText = `Lagt til WMS-lag: ${layerName}`;
-                    statusDiv.style.color = "green";
-                } catch (error) {
-                    statusDiv.innerText = "Feil ved tillegging av WMS.";
-                    statusDiv.style.color = "red";
-                }
-
-            } else if (type === 'WFS') {
-                const formatStr = document.getElementById('layer-format').value; 
-                statusDiv.innerHTML = "Laster ned vektordata...";
+            try {
+                statusDiv.innerHTML = "Laster inn WMS...";
                 statusDiv.style.color = "blue";
 
-                const wfsRequestUrl = `${baseUrl}?service=WFS&version=1.0.0&request=GetFeature&typeName=${layerName}&outputFormat=${encodeURIComponent(formatStr)}&srsName=EPSG:4326`;
+                var newLayer = L.tileLayer.wms(baseUrl, { 
+                    layers: layerName, 
+                    format: 'image/png', 
+                    transparent: true,
+                    version: '1.3.0',
+                    crs: L.CRS.EPSG3857 
+                });
+                
+                newLayer.addTo(map);
+                layerControl.addOverlay(newLayer, layerName + " (WMS)");
 
-                try {
-                    const response = await fetch(wfsRequestUrl);
-                    if (!response.ok) throw new Error(`Server svarte med feilkode ${response.status}`);
-                    
-                    const responseText = await response.text();
-                    
-                    let geoJsonData;
-                    try {
-                        geoJsonData = JSON.parse(responseText);
-                    } catch (parseError) {
-                        if (responseText.includes("ServiceExceptionReport") || responseText.includes("xml")) {
-                            throw new Error("Serveren returnerte en XML-feilmelding. Sjekk typenavn eller at den støtter GeoJSON.");
-                        } else if (responseText.includes("Content-Type")) {
-                            throw new Error("Kartserveren har en oppsettsfeil (lekker headere). Bruk WMS i stedet.");
-                        } else {
-                            throw new Error(`Mottok ugyldig data fra serveren: "${responseText.substring(0, 40)}..."`);
-                        }
-                    }
-
-                    const wfsLayer = L.geoJSON(geoJsonData, {
-                        style: function (feature) {
-                            return { color: "#ff7800", weight: 2, opacity: 0.8 }; 
-                        },
-                        onEachFeature: function (feature, layer) {
-                            if (feature.properties) {
-                                let popupContent = "<div style='max-height: 200px; overflow-y: auto;'><b>Egenskaper:</b><br>";
-                                for (let key in feature.properties) {
-                                    popupContent += `<b>${key}:</b> ${feature.properties[key]}<br>`;
-                                }
-                                popupContent += "</div>";
-                                layer.bindPopup(popupContent);
-                            }
-                        }
-                    });
-
-                    wfsLayer.addTo(map);
-                    layerControl.addOverlay(wfsLayer, layerName + " (WFS)");
-                    
-                    statusDiv.innerText = `Lastet inn ${geoJsonData.features.length} objekter.`;
-                    statusDiv.style.color = "green";
-
-                } catch (error) {
-                    console.error("WFS feil:", error);
-                    statusDiv.innerHTML = `<b>Feil:</b> ${error.message}`;
-                    statusDiv.style.color = "red";
-                }
+                statusDiv.innerText = `Lagt til: ${layerName}`;
+                statusDiv.style.color = "green";
+            } catch (error) {
+                statusDiv.innerText = "Klarte ikke å koble til WMS-serveren.";
+                statusDiv.style.color = "red";
+                console.error(error);
             }
         }
 
