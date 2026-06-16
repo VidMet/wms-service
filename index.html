@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.12</span>
+            <span class="version-badge">v1.13</span>
         </div>
 
         <div class="control-group">
@@ -77,6 +77,15 @@
             <div id="wfs-status" style="font-size: 11px; color: #666; margin-top: 3px; word-break: break-all;"></div>
         </div>
 
+        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
+            <strong>4. Søk opp adresse (Kartverket REST-API):</strong>
+            <div class="input-group">
+                <input type="text" id="address-search" placeholder="F.eks. Storgata 1, Oslo" onkeypress="handleSearchEnter(event)">
+                <button onclick="searchAddressREST()">Søk</button>
+            </div>
+            <div id="rest-status" style="font-size: 11px; color: #666; margin-top: 3px;"></div>
+        </div>
+
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px; min-height: 40px;">
             <div id="coord-readout" style="color: #555; font-size: 12px; line-height: 1.4;">Venter på bevegelse i 3D...</div>
         </div>
@@ -89,6 +98,7 @@
         let currentModelCRS = "EPSG:5111"; 
         let lastModelX = null, lastModelY = null;
         let map, cameraMarker, layerControl;
+        let searchMarker = null; // Ny variabel for søkeresultat-pinnen
 
         const crsConfig = {
             "EPSG:25832": { name: "EUREF89 UTM Sone 32N", projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" },
@@ -140,7 +150,6 @@
             var layerName = document.getElementById('wms-layer').value;
             if (!url || !layerName) return alert("Fyll inn WMS URL og lagnavn.");
             
-            // v1.12: Tvinger WMS 1.3.0 og eksplisitt EPSG:3857 støtte.
             var newLayer = L.tileLayer.wms(url, { 
                 layers: layerName, 
                 format: 'image/png', 
@@ -164,15 +173,11 @@
             statusDiv.style.color = "blue";
 
             const separator = baseUrl.includes('?') ? '&' : '?';
-            // v1.12: Bruker et bredere WFS-oppsett. Prøver først standard application/json
             const wfsRequestUrl = `${baseUrl}${separator}service=WFS&version=1.0.0&request=GetFeature&typeName=${typeName}&outputFormat=application/json&srsName=EPSG:4326`;
 
             try {
                 const response = await fetch(wfsRequestUrl);
-                
-                if (!response.ok) {
-                    throw new Error(`Server svarte med status ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`Server svarte med status ${response.status}`);
                 
                 const geoJsonData = await response.json();
 
@@ -199,10 +204,66 @@
                 statusDiv.style.color = "green";
 
             } catch (error) {
-                console.error("WFS feil:", error);
-                // v1.12: Spytter ut den nøyaktige URLen slik at du kan teste den manuelt
-                statusDiv.innerHTML = `<b>Feil:</b> Klarte ikke hente data. Det kan være en CORS-blokkering eller formatfeil. <br><br>
-                <a href="${wfsRequestUrl}" target="_blank" style="color:red; text-decoration:underline;">Klikk her for å teste lenken direkte i nettleseren</a> for å se serverens feilmelding.`;
+                statusDiv.innerHTML = `<b>Feil:</b> Sjekk URL/CORS.`;
+                statusDiv.style.color = "red";
+            }
+        }
+
+        // --- NY FUNKSJON: KARTVERKET ADRESSE REST-API ---
+        function handleSearchEnter(event) {
+            if (event.key === "Enter") searchAddressREST();
+        }
+
+        async function searchAddressREST() {
+            const query = document.getElementById('address-search').value;
+            const statusDiv = document.getElementById('rest-status');
+
+            if (!query) return;
+
+            statusDiv.innerText = "Søker...";
+            statusDiv.style.color = "blue";
+
+            // Geonorge Adresse REST-API endepunkt
+            // Vi ber om maks 1 treff (det mest relevante)
+            const apiUrl = `https://ws.geonorge.no/adresser/v1/sok?sok=${encodeURIComponent(query)}&treffPerSide=1`;
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error("Feil fra API");
+
+                const data = await response.json();
+
+                // Sjekk om vi fikk noen treff i JSON-svaret
+                if (data.adresser && data.adresser.length > 0) {
+                    const hit = data.adresser[0];
+                    
+                    // API-et returnerer koordinater i lat/lon (EPSG:4258 som tilsvarer WGS84)
+                    const lat = hit.representasjonspunkt.lat;
+                    const lon = hit.representasjonspunkt.lon;
+
+                    // Flytt kartet til adressen
+                    map.flyTo([lat, lon], 18, { animate: true, duration: 1 });
+
+                    // Fjern gammel søkemarkør hvis den finnes
+                    if (searchMarker) {
+                        map.removeLayer(searchMarker);
+                    }
+
+                    // Lag en ny, blå markør for søkeresultatet og vis informasjonen
+                    searchMarker = L.marker([lat, lon]).addTo(map);
+                    searchMarker.bindPopup(`<b>${hit.adressetekst}</b><br>${hit.postnummer} ${hit.poststed}`).openPopup();
+
+                    statusDiv.innerText = `Fant: ${hit.adressetekst}`;
+                    statusDiv.style.color = "green";
+
+                } else {
+                    statusDiv.innerText = "Ingen treff på denne adressen.";
+                    statusDiv.style.color = "red";
+                }
+
+            } catch (error) {
+                console.error("REST API feil:", error);
+                statusDiv.innerText = "Klarte ikke å koble til Kartverkets API.";
                 statusDiv.style.color = "red";
             }
         }
@@ -217,7 +278,10 @@
 
             try {
                 const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [projEasting, projNorthing]);
-                map.setView([wgs84Coords[1], wgs84Coords[0]], map.getZoom()); 
+                
+                // Vi bytter til setView (i stedet for flyTo) for 3D-synkronisering for å unngå at 
+                // søkefunksjonen og 3D-motoren krangler om kamera-animasjoner
+                map.setView([wgs84Coords[1], wgs84Coords[0]], map.getZoom(), {animate: false}); 
                 cameraMarker.setLatLng([wgs84Coords[1], wgs84Coords[0]]);
                 
                 document.getElementById('coord-readout').innerHTML = 
@@ -238,9 +302,7 @@
                 document.getElementById('api-text').innerText = "Kobler til 3D-motor...";
 
                 const api = await TrimbleConnectWorkspace.connect(window.parent, (event, payload) => {
-                    
                     if (event === "viewer.onCameraChanged" || event === "viewer.cameraChanged" || event === "cameraChanged") {
-                        
                         const cameraData = payload.data;
                         if (!cameraData) return;
 
