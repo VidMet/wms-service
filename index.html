@@ -47,76 +47,40 @@
     </div>
 
     <script>
-        // --- 1. DYNAMISK OPPSETT AV KOORDINATSYSTEMER (UTM & NTM) ---
-        const crsConfig = {
-            "EPSG:25832": {
-                name: "EUREF89 UTM Sone 32N",
-                projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-            },
-            "EPSG:25833": {
-                name: "EUREF89 UTM Sone 33N",
-                projString: "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-            }
-        };
+        // 1. Introduser globale variabler for å huske siste kameraposisjon
+        let lastModelX = null;
+        let lastModelY = null;
 
-        // Generer alle NTM-soner (sone 5 til 30) matematisk
-        for (let zone = 5; zone <= 30; zone++) {
-            let epsgCode = `EPSG:${5100 + zone}`;
-            let lon0 = zone + 0.5; // Sentralmeridian
-            
-            crsConfig[epsgCode] = {
-                name: `EUREF89 NTM Sone ${zone}`,
-                projString: `+proj=tmerc +lat_0=58 +lon_0=${lon0} +k=1 +x_0=100000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`
-            };
+        // 2. Oppdater synkroniseringsfunksjonen slik at den lagrer posisjonen hver gang kameraet flytter seg
+        function syncMapToTrimbleCamera(modelX, modelY) {
+            // Lagre koordinatene slik at vi husker dem til et eventuelt systembytte senere
+            lastModelX = modelX;
+            lastModelY = modelY;
+
+            // Konverter fra valgt prosjekt-CRS til WGS84
+            const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [modelX, modelY]);
+            const lng = wgs84Coords[0];
+            const lat = wgs84Coords[1];
+
+            // Flytt kartet og oppdater markøren glatt
+            map.flyTo([lat, lng], 17, { animate: true, duration: 0.5 });
+            cameraMarker.setLatLng([lat, lng]);
+
+            document.getElementById('coord-readout').innerText = 
+                `Modell: X=${modelX.toFixed(1)}, Y=${modelY.toFixed(1)} | Kart: Lat=${lat.toFixed(5)}, Lng=${lng.toFixed(5)}`;
         }
 
-        // Registrer systemene i Proj4-biblioteket
-        for (const [code, data] of Object.entries(crsConfig)) {
-            proj4.defs(code, data.projString);
-        }
-
-        let currentModelCRS = "EPSG:25832"; // Standardvalg ved oppstart
-
-        // --- 2. INITIALISERING AV KART OG KARTLAG ---
-        // Starter sentrert i Sør-Norge
-        var map = L.map('map').setView([60.8, 11.1], 13); 
-
-        // Standardvektorkart (OpenStreetMap)
-        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap'
-        });
-
-        // Nytt: Flyfotolag (Esri World Imagery)
-        var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-        });
-
-        // Sett flyfoto som standard aktivt lag ved oppstart
-        flyfotoLayer.addTo(map); 
-
-        // Konfigurer lagvelgeren (oppe til høyre på kartet)
-        var baseMaps = {
-            "Flyfoto / Satellitt": flyfotoLayer,
-            "OpenStreetMap (Vektor)": osmLayer
-        };
-        var overlayMaps = {};
-        
-        var layerControl = L.control.layers(baseMaps, overlayMaps).addTo(map);
-
-        // --- 3. FYLL NEDTREKKSMENYEN MED KOORDINATSYSTEMER ---
-        const selector = document.getElementById('crs-selector');
-        for (const [code, data] of Object.entries(crsConfig)) {
-            let option = document.createElement('option');
-            option.value = code;
-            option.text = `${data.name} (${code})`;
-            selector.appendChild(option);
-        }
-
+        // 3. Oppdater funksjonen som kjører ved endring i nedtrekksmenyen
         function updateCRS() {
             currentModelCRS = document.getElementById('crs-selector').value;
             console.log("Byttet aktivt koordinatsystem til:", currentModelCRS);
+            
+            // Sjekk om vi allerede har mottatt koordinater fra 3D-visningen.
+            // Hvis vi har det, kjører vi synkroniseringen på nytt med det samme slik at kartet flytter seg.
+            if (lastModelX !== null && lastModelY !== null) {
+                console.log("Rekalkulerer posisjon med nytt koordinatsystem...");
+                syncMapToTrimbleCamera(lastModelX, lastModelY);
+            }
         }
 
         // --- 4. FUNKSJON FOR BRUKERDEFINERTE WMS-LAG ---
