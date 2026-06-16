@@ -113,9 +113,8 @@
         var cameraMarker = L.marker([0,0]).addTo(map);
 
         function syncMapToTrimbleCamera(modelX, modelY) {
-            console.log("RÅDATA FRA TRIMBLE:", "X:", modelX, "Y:", modelY);
             // Konverter fra valgt prosjekt-CRS (f.eks. en NTM-sone) til WGS84
-            const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [modelX, modelY]);
+            const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [modelY, modelX]);
             const lng = wgs84Coords[0];
             const lat = wgs84Coords[1];
 
