@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Trimble Connect MiniMap - Koordinatstyrt</title>
+    <title>Trimble Connect MiniMap - Flyfoto og NTM</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
@@ -15,7 +15,9 @@
         #map { flex-grow: 1; width: 100%; }
         #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; }
         .control-group { margin-bottom: 10px; }
-        select, button { padding: 4px; }
+        .input-group { margin-top: 5px; }
+        select, button, input { padding: 4px; }
+        input[type="text"] { width: 200px; }
     </style>
 </head>
 <body>
@@ -28,16 +30,25 @@
             <select id="crs-selector" onchange="updateCRS()">
                 </select>
         </div>
+        
         <div class="control-group">
+            <strong>Legg til egne WMS-lag (f.eks. lokale ortofoto):</strong>
+            <div class="input-group">
+                <input type="text" id="wms-url" placeholder="Lim inn WMS URL...">
+                <input text="text" id="wms-layer" placeholder="Lagnavn">
+                <button onclick="addCustomWMS()">Legg til</button>
+            </div>
+        </div>
+
+        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 5px;">
             <button onclick="simulateTrimbleCameraMoved()">Test: Simuler kamera i 3D</button>
             <span id="coord-readout" style="margin-left: 10px; color: #555;">Venter på 3D-kamera...</span>
         </div>
     </div>
 
     <script>
-        // --- 1. KONFIGURASJON AV KOORDINATSYSTEMER ---
+        // --- 1. DYNAMISK OPPSETT AV KOORDINATSYSTEMER (UTM & NTM) ---
         const crsConfig = {
-            // Du kan beholde UTM og lokale systemer som faste definisjoner
             "EPSG:25832": {
                 name: "EUREF89 UTM Sone 32N",
                 projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
@@ -48,105 +59,115 @@
             }
         };
 
-        // --- NYTT: Generer alle NTM-soner (5 til 30) dynamisk ---
-        function generateNTMZones() {
-            for (let zone = 5; zone <= 30; zone++) {
-                let epsgCode = `EPSG:${5100 + zone}`;
-                let lon0 = zone + 0.5; // Beregn sentralmeridian
-                
-                // Bygg Proj4-strengen for denne sonen
-                let projString = `+proj=tmerc +lat_0=58 +lon_0=${lon0} +k=1 +x_0=100000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
-                
-                // Legg den inn i konfigurasjonsobjektet
-                crsConfig[epsgCode] = {
-                    name: `EUREF89 NTM Sone ${zone}`,
-                    projString: projString
-                };
-            }
+        // Generer alle NTM-soner (sone 5 til 30) matematisk
+        for (let zone = 5; zone <= 30; zone++) {
+            let epsgCode = `EPSG:${5100 + zone}`;
+            let lon0 = zone + 0.5; // Sentralmeridian
+            
+            crsConfig[epsgCode] = {
+                name: `EUREF89 NTM Sone ${zone}`,
+                projString: `+proj=tmerc +lat_0=58 +lon_0=${lon0} +k=1 +x_0=100000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`
+            };
         }
 
-        // Kjør funksjonen for å populere listen før vi registrerer i Proj4js
-        generateNTMZones();
-
-        // Registrer systemene i Proj4
+        // Registrer systemene i Proj4-biblioteket
         for (const [code, data] of Object.entries(crsConfig)) {
             proj4.defs(code, data.projString);
         }
 
-        let currentModelCRS = "EPSG:25832"; // Standardvalg
+        let currentModelCRS = "EPSG:25832"; // Standardvalg ved oppstart
 
-        // --- 2. OPPSETT AV KART OG WMS ---
-        var map = L.map('map').setView([60.7945, 11.0680], 13); // Startvisning
+        // --- 2. INITIALISERING AV KART OG KARTLAG ---
+        // Starter sentrert i Sør-Norge
+        var map = L.map('map').setView([60.8, 11.1], 13); 
 
-        // OpenStreetMap (Standard)
+        // Standardvektorkart (OpenStreetMap)
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            attribution: '&copy; OpenStreetMap contributors'
+            attribution: '&copy; OpenStreetMap'
         });
 
-        // Kartverket Topo
-        var topoKart = L.tileLayer.wms('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
-            layers: 'topo4',
-            format: 'image/png',
-            transparent: true,
-            attribution: '&copy; Kartverket'
+        // Nytt: Flyfotolag (Esri World Imagery)
+        var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
         });
 
-        osmLayer.addTo(map); // Sett OSM som default synlig
+        // Sett flyfoto som standard aktivt lag ved oppstart
+        flyfotoLayer.addTo(map); 
 
-        // Lagkontroll
+        // Konfigurer lagvelgeren (oppe til høyre på kartet)
         var baseMaps = {
-            "OpenStreetMap": osmLayer,
-            "Kartverket Topo4": topoKart
+            "Flyfoto / Satellitt": flyfotoLayer,
+            "OpenStreetMap (Vektor)": osmLayer
         };
-        L.control.layers(baseMaps, {}).addTo(map);
+        var overlayMaps = {};
+        
+        var layerControl = L.control.layers(baseMaps, overlayMaps).addTo(map);
 
-        // --- 3. UI OG LOGIKK FOR KOORDINATSYSTEM ---
+        // --- 3. FYLL NEDTREKKSMENYEN MED KOORDINATSYSTEMER ---
         const selector = document.getElementById('crs-selector');
         for (const [code, data] of Object.entries(crsConfig)) {
             let option = document.createElement('option');
             option.value = code;
-            option.text = data.name + " (" + code + ")";
+            option.text = `${data.name} (${code})`;
             selector.appendChild(option);
         }
 
         function updateCRS() {
             currentModelCRS = document.getElementById('crs-selector').value;
-            console.log("Byttet modell-CRS til:", currentModelCRS);
+            console.log("Byttet aktivt koordinatsystem til:", currentModelCRS);
         }
 
-        // --- 4. KONVERTERING OG SYNKRONISERING ---
-        
-        // Marker i kartet for å vise hvor 3D-kameraet ser
+        // --- 4. FUNKSJON FOR BRUKERDEFINERTE WMS-LAG ---
+        function addCustomWMS() {
+            var url = document.getElementById('wms-url').value;
+            var layerName = document.getElementById('wms-layer').value;
+            var displayName = layerName || "Egendefinert lag";
+
+            if (!url || !layerName) {
+                alert("Du må fylle inn både WMS URL og lagnavn.");
+                return;
+            }
+
+            var newWmsLayer = L.tileLayer.wms(url, {
+                layers: layerName,
+                format: 'image/png',
+                transparent: true,
+                version: '1.3.0'
+            });
+
+            newWmsLayer.addTo(map);
+            layerControl.addOverlay(newWmsLayer, displayName);
+
+            // Tøm feltene etterpå
+            document.getElementById('wms-url').value = '';
+            document.getElementById('wms-layer').value = '';
+        }
+
+        // --- 5. TIE-IN TIL TRIMBLE CONNECT API ---
         var cameraMarker = L.marker([0,0]).addTo(map);
 
-        /**
-         * Tar inn X og Y fra Trimble Connect og flytter 2D-kartet
-         */
         function syncMapToTrimbleCamera(modelX, modelY) {
-            // Proj4 konverterer fra valgt system -> WGS84 (EPSG:4326)
-            // Proj4 forventer array [X, Y], og returnerer [Lengdegrad, Breddegrad]
+            // Konverter fra valgt prosjekt-CRS (f.eks. en NTM-sone) til WGS84
             const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [modelX, modelY]);
-            
             const lng = wgs84Coords[0];
             const lat = wgs84Coords[1];
 
-            // Leaflet forventer [Breddegrad, Lengdegrad]
-            map.flyTo([lat, lng], 16, { animate: true, duration: 0.5 });
+            // Flytt kartet og oppdater markøren glatt
+            map.flyTo([lat, lng], 17, { animate: true, duration: 0.5 });
             cameraMarker.setLatLng([lat, lng]);
 
             document.getElementById('coord-readout').innerText = 
-                `Modell: X=${modelX.toFixed(1)}, Y=${modelY.toFixed(1)} | WGS84: Lat=${lat.toFixed(4)}, Lng=${lng.toFixed(4)}`;
+                `Modell: X=${modelX.toFixed(1)}, Y=${modelY.toFixed(1)} | Kart: Lat=${lat.toFixed(5)}, Lng=${lng.toFixed(5)}`;
         }
 
-        /**
-         * Simuleringsfunksjon: Dette er her du senere legger inn event listener 
-         * for Workspace API-et: viewer.on('cameraChanged', (event) => {...})
-         */
+        // Simuleringsknapp for testing utenfor selve Trimble Connect-rammeverket
         function simulateTrimbleCameraMoved() {
-            // Fiktive koordinater (F.eks. et kryss på E6 i UTM32N)
-            const mockX = 612500.5; 
-            const mockY = 6741200.8;
+            // Eksempelkoordinater (Kan representere en anleggsmodell i NTM Sone 10 eller UTM 32)
+            // Hvis du har valgt NTM-sone 10, vil disse treffe i nærheten av Hamar/Løten
+            const mockX = 132400.0; 
+            const mockY = 1311500.0;
             syncMapToTrimbleCamera(mockX, mockY);
         }
     </script>
