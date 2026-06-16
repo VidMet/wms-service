@@ -46,7 +46,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.15</span>
+            <span class="version-badge">v1.16</span>
         </div>
 
         <div class="control-group">
@@ -149,11 +149,14 @@
         }
 
         function addCustomWMS() {
-            var url = document.getElementById('wms-url').value;
+            // Vasker URL automatisk for WMS også
+            let rawUrl = document.getElementById('wms-url').value.trim();
+            const baseUrl = rawUrl.split('?')[0];
+
             var layerName = document.getElementById('wms-layer').value;
-            if (!url || !layerName) return alert("Fyll inn WMS URL og lagnavn.");
+            if (!baseUrl || !layerName) return alert("Fyll inn WMS URL og lagnavn.");
             
-            var newLayer = L.tileLayer.wms(url, { 
+            var newLayer = L.tileLayer.wms(baseUrl, { 
                 layers: layerName, 
                 format: 'image/png', 
                 transparent: true,
@@ -166,11 +169,12 @@
         }
 
         async function addCustomWFS() {
-            let rawUrl = document.getElementById('wfs-url').value;
+            // v1.16: Vasker WFS URL automatisk for å unngå parameter-kræsj
+            let rawUrl = document.getElementById('wfs-url').value.trim();
             const baseUrl = rawUrl.split('?')[0]; 
             
-            const typeName = document.getElementById('wfs-layer').value;
-            const formatStr = document.getElementById('wfs-format').value; // Henter valgt format
+            const typeName = document.getElementById('wfs-layer').value.trim();
+            const formatStr = document.getElementById('wfs-format').value; 
             const statusDiv = document.getElementById('wfs-status');
             
             if (!baseUrl || !typeName) return alert("Fyll inn WFS URL og typenavn.");
@@ -178,16 +182,16 @@
             statusDiv.innerHTML = "Laster ned vektordata...";
             statusDiv.style.color = "blue";
 
-            // Bygger URL med det formatet brukeren valgte i menyen
             const wfsRequestUrl = `${baseUrl}?service=WFS&version=1.0.0&request=GetFeature&typeName=${typeName}&outputFormat=${encodeURIComponent(formatStr)}&srsName=EPSG:4326`;
 
             try {
                 const response = await fetch(wfsRequestUrl);
                 if (!response.ok) throw new Error(`Server svarte med status ${response.status}`);
                 
+                // v1.16: GML-skjold. Stopper prosessen pent hvis serveren bare leverer GML/XML
                 const contentType = response.headers.get("content-type");
-                if (contentType && contentType.indexOf("xml") !== -1) {
-                    throw new Error("Serveren returnerte XML. Sjekk typenavn eller bytt format i nedtrekksmenyen.");
+                if (contentType && (contentType.includes("xml") || contentType.includes("gml"))) {
+                    throw new Error("Serveren leverer kun GML/XML. Dette formatet støttes ikke for vektordata i nettleseren. Bruk funksjonen 'Legg til WMS (Bilde)' i stedet.");
                 }
 
                 const geoJsonData = await response.json();
@@ -216,8 +220,8 @@
 
             } catch (error) {
                 console.error("WFS feil:", error);
-                statusDiv.innerHTML = `<b>Feil:</b> Kunne ikke laste/tolke data.<br> 
-                <a href="${wfsRequestUrl}" target="_blank" style="color:red; text-decoration:underline;">Klikk her for å teste lenken i nettleseren</a> for å se serverens svar.`;
+                // Viser den nøyaktige feilmeldingen for GML-avvisning
+                statusDiv.innerHTML = `<b>Feil:</b> ${error.message}`;
                 statusDiv.style.color = "red";
             }
         }
