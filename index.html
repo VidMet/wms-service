@@ -34,6 +34,22 @@
         label { cursor: pointer; }
         .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: red; margin-right: 5px; }
         .status-dot.connected { background-color: #4CAF50; }
+        
+        /* Stil for den nye Street View-knappen */
+        .btn-streetview {
+            width: 100%;
+            padding: 8px;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-streetview:hover {
+            background-color: #3367d6;
+        }
     </style>
 </head>
 <body>
@@ -46,7 +62,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.20</span>
+            <span class="version-badge">v1.21</span>
         </div>
 
         <div class="control-group">
@@ -75,6 +91,16 @@
                 <button onclick="searchAddressREST()">Søk</button>
             </div>
             <div id="rest-status" style="font-size: 11px; color: #666; margin-top: 3px;"></div>
+        </div>
+
+        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
+            <strong>4. Google Street View:</strong>
+            <div class="input-group">
+                <button class="btn-streetview" onclick="openStreetView()">
+                    🌍 Åpne kameraets posisjon i Street View
+                </button>
+            </div>
+            <div style="font-size: 11px; color: #666; margin-top: 3px;">Åpnes i ny fane (gratis og krever ingen API-nøkkel)</div>
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px; min-height: 40px;">
@@ -110,11 +136,9 @@
         });
         resizeObserver.observe(document.getElementById('map'));
 
-        // --- KARTLAG OPPSETT ---
         var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
         
-        // Nytt standard-lag: Geonorge Matrikkel (Eiendomskart)
         var eiendomLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.matrikkel', {
             layers: 'eiendomsgrense,eiendoms_id',
             format: 'image/png',
@@ -124,19 +148,11 @@
             maxZoom: 22
         });
         
-        // Slår på flyfoto som standard
         flyfotoLayer.addTo(map);
         
-        // Legger lagene inn i kontrollmenyen øverst til høyre. 
-        // Bakgrunnskart (radioknapper) først, deretter Overlays (sjekkbokser).
         layerControl = L.control.layers(
-            {
-                "Flyfoto": flyfotoLayer, 
-                "Vektorkart": osmLayer
-            }, 
-            {
-                "Eiendomskart": eiendomLayer
-            }
+            { "Flyfoto": flyfotoLayer, "Vektorkart": osmLayer }, 
+            { "Eiendomskart": eiendomLayer }
         ).addTo(map);
         
         cameraMarker = L.marker([0,0]).addTo(map);
@@ -237,6 +253,30 @@
                 console.error("REST API feil:", error);
                 statusDiv.innerText = "Klarte ikke å koble til Kartverkets API.";
                 statusDiv.style.color = "red";
+            }
+        }
+
+        // --- NY FUNKSJON: Åpne Street View ---
+        function openStreetView() {
+            if (lastModelX === null || lastModelY === null) {
+                alert("Naviger i 3D-visningen først slik at systemet vet hvor du er!");
+                return;
+            }
+
+            try {
+                // Konverter prosjektets meter-koordinater til internasjonale GPS-koordinater (WGS84)
+                const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [lastModelX, lastModelY]);
+                const lon = wgs84Coords[0];
+                const lat = wgs84Coords[1];
+
+                // Bygg den offisielle URL-en for Google Maps Street View-søk
+                const svUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
+                
+                // Åpne i ny fane (det er dette som gjør at vi omgår krav om API-nøkkel)
+                window.open(svUrl, '_blank');
+            } catch (error) {
+                console.error("Feil ved generering av Street View-lenke:", error);
+                alert("Klarte ikke å beregne koordinatene for Street View.");
             }
         }
 
