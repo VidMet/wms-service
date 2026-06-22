@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="nb">
 <head>
     <title>Trimble Connect MiniMap</title>
     <meta charset="utf-8" />
@@ -22,37 +22,70 @@
     <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #fff;}
-        #map { flex-grow: 1; width: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #666; }
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #f3f4f6;}
+        #map { flex-grow: 1; width: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #666; border-top: 1px solid #d1d5db; }
         #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; overflow-y: auto; flex-shrink: 0; }
+        
+        /* --- NORCONSULT HEADER STYLING --- */
+        .topbar {
+            height: auto; background: #fff; 
+            display: flex; align-items: center; gap: 15px; padding: 10px 15px; flex: 0 0 auto;
+            font-family: 'Syne', sans-serif;
+        }
+        .logo-card {
+            width: 120px; height: 50px; border: 1px solid #d1d5db; border-radius: 8px;
+            background: #fff; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 14px rgba(16,24,40,.08); overflow: hidden; flex-shrink: 0;
+        }
+        .logo-card img { max-width: 100px; max-height: 40px; object-fit: contain; }
+        .app-title { display: flex; flex-direction: column; line-height: 1.2; }
+        .app-title b { font-size: 16px; color: #0050b5; }
+        .app-title span { font-size: 13px; font-weight: 600; color: #111827; }
+        .app-title em { font-size: 11px; color: #6b7280; font-style: normal; margin-top: 2px;}
+
+        @media(max-width:500px) {
+            .topbar { padding: 8px; flex-wrap: wrap; gap: 10px;}
+            .logo-card { width: 100px; height: 45px; }
+            .app-title b { font-size: 14px; }
+            .app-title span { font-size: 11px; }
+            .app-title em { display: none; } /* Skjuler e-posten hvis panelet er smalt */
+        }
+
+        /* --- KONTROLLPANEL STYLING --- */
         .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px; }
-        .version-badge { background: #005A9E; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .version-badge { background: #005A9E; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; font-family: 'JetBrains Mono', monospace;}
         .control-group { margin-bottom: 10px; }
         .input-group { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center;}
-        select, button, input[type="text"] { padding: 4px; }
-        input[type="text"] { flex-grow: 1; min-width: 120px; }
+        select, button, input[type="text"] { padding: 4px; font-family: sans-serif; }
+        input[type="text"] { flex-grow: 1; min-width: 120px; border: 1px solid #ccc; border-radius: 4px; }
+        button { border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
+        button:hover { background: #eee; }
         label { cursor: pointer; }
         .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: red; margin-right: 5px; }
-        .status-dot.connected { background-color: #4CAF50; }
+        .status-dot.connected { background-color: #22a06b; }
         
-        /* Stil for den nye Street View-knappen */
         .btn-streetview {
-            width: 100%;
-            padding: 8px;
-            background-color: #4285F4;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
-            cursor: pointer;
+            width: 100%; padding: 8px; background-color: #4285F4; color: white;
+            border: none; border-radius: 4px; font-weight: bold; cursor: pointer;
             transition: background-color 0.2s;
         }
-        .btn-streetview:hover {
-            background-color: #3367d6;
-        }
+        .btn-streetview:hover { background-color: #3367d6; }
     </style>
 </head>
 <body>
+
+    <header class="topbar">
+        <div class="logo-card">
+            <img src="norconsult-logo-black.png" alt="Norconsult" onerror="this.style.display='none'">
+        </div>
+        <div class="app-title">
+            <b>Trimble Connect MiniMap v1.22</b>
+            <span>Norconsult Norge</span>
+            <em>Developed by Norconsult, AI-assisted development. Kontaktperson: Vidar.Metveit@norconsult.com</em>
+        </div>
+    </header>
 
     <div id="map">Laster kartbiblioteker...</div>
 
@@ -62,12 +95,12 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.21</span>
+            <span class="version-badge">v1.22</span>
         </div>
 
         <div class="control-group">
             <strong>1. Prosjektets koordinatsystem:</strong><br>
-            <select id="crs-selector" onchange="updateCRS()" style="margin-top: 5px; width: 100%;"></select>
+            <select id="crs-selector" onchange="updateCRS()" style="margin-top: 5px; width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 4px;"></select>
         </div>
         
         <div class="control-group">
@@ -100,10 +133,10 @@
                     🌍 Åpne kameraets posisjon i Street View
                 </button>
             </div>
-            <div style="font-size: 11px; color: #666; margin-top: 3px;">Åpnes i ny fane (gratis og krever ingen API-nøkkel)</div>
+            <div style="font-size: 11px; color: #666; margin-top: 3px;">Åpnes i ny fane (krever ingen API-nøkkel)</div>
         </div>
 
-        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px; min-height: 40px;">
+        <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px; background: #eef; padding: 5px; min-height: 40px; border-radius: 4px;">
             <div id="coord-readout" style="color: #555; font-size: 12px; line-height: 1.4;">Venter på bevegelse i 3D...</div>
         </div>
     </div>
@@ -152,7 +185,7 @@
         
         layerControl = L.control.layers(
             { "Flyfoto": flyfotoLayer, "Vektorkart": osmLayer }, 
-            { "Eiendomskart": eiendomLayer }
+            { "Eiendomskart (Matrikkel)": eiendomLayer }
         ).addTo(map);
         
         cameraMarker = L.marker([0,0]).addTo(map);
@@ -256,7 +289,6 @@
             }
         }
 
-        // --- NY FUNKSJON: Åpne Street View ---
         function openStreetView() {
             if (lastModelX === null || lastModelY === null) {
                 alert("Naviger i 3D-visningen først slik at systemet vet hvor du er!");
@@ -264,15 +296,11 @@
             }
 
             try {
-                // Konverter prosjektets meter-koordinater til internasjonale GPS-koordinater (WGS84)
                 const wgs84Coords = proj4(currentModelCRS, 'EPSG:4326', [lastModelX, lastModelY]);
                 const lon = wgs84Coords[0];
                 const lat = wgs84Coords[1];
 
-                // Bygg den offisielle URL-en for Google Maps Street View-søk
-                const svUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
-                
-                // Åpne i ny fane (det er dette som gjør at vi omgår krav om API-nøkkel)
+                const svUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$${lat},${lon}`;
                 window.open(svUrl, '_blank');
             } catch (error) {
                 console.error("Feil ved generering av Street View-lenke:", error);
