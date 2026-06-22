@@ -84,7 +84,7 @@
             <img src="norconsult-logo-black.png" alt="Norconsult" onerror="this.style.display='none'">
         </div>
         <div class="app-title">
-            <b>Trimble Connect MiniMap v1.24</b>
+            <b>Trimble Connect MiniMap v1.25</b>
             <span>Norconsult Norge</span>
             <em>Developed by Norconsult, AI-assisted development. Kontaktperson: Vidar.Metveit@norconsult.com</em>
         </div>
@@ -98,7 +98,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.24</span>
+            <span class="version-badge">v1.25</span>
         </div>
 
         <div class="control-group">
@@ -172,18 +172,30 @@
         });
         resizeObserver.observe(document.getElementById('map'));
 
+        // --- DEFINERER BAKGRUNNSKART ---
         var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
         
+        // NY: Norges Grunnkart som base layer (bilde er ikke gjennomsiktig)
+        var grunnkartLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.norges_grunnkart', {
+            layers: 'Norges_grunnkart',
+            format: 'image/png',
+            transparent: false,
+            version: '1.3.0',
+            crs: L.CRS.EPSG3857,
+            maxZoom: 22
+        });
+        
         flyfotoLayer.addTo(map);
 
-        // --- OPPSETT AV GRUPPERT MENY (KUN BASELAYERS FRA START) ---
+        // --- OPPSETT AV GRUPPERT MENY ---
+        // Viser nå Flyfoto, Vektorkart og Grunnkart som radioknapper man kan velge mellom
         var baseLayers = {
             "Flyfoto": flyfotoLayer, 
-            "Vektorkart": osmLayer
+            "Vektorkart": osmLayer,
+            "Grunnkart": grunnkartLayer
         };
         
-        // Setter opp kontrollen, men lar overlag (overlays) være helt tom i starten
         layerControl = L.control.groupedLayers(baseLayers, {}).addTo(map);
         
         cameraMarker = L.marker([0,0]).addTo(map);
@@ -195,27 +207,20 @@
             selector.appendChild(option);
         }
 
-        // --- NY FUNKSJON: Laster WMS fra wms-services.json ---
         async function loadWMSConfig() {
             try {
-                // Legg til en tidsstempel-parameter for å unngå at nettleseren cacher en gammel json-fil
                 const response = await fetch(`wms-services.json?t=${new Date().getTime()}`);
                 if (!response.ok) throw new Error('Fant ikke wms-services.json');
                 
                 const wmsData = await response.json();
 
-                // Går igjennom hver kategori (Eiendom, Samferdsel osv.)
                 for (const [groupName, layers] of Object.entries(wmsData)) {
                     layers.forEach(layerDef => {
-                        // Sørger for at CRS alltid settes til Web Mercator (Leaflet sin standard)
                         const layerOptions = Object.assign({}, layerDef.options, {
                             crs: L.CRS.EPSG3857
                         });
                         
-                        // Oppretter kartlaget
                         const newLayer = L.tileLayer.wms(layerDef.url, layerOptions);
-                        
-                        // Skyter kartlaget inn i riktig gruppe i menyen!
                         layerControl.addOverlay(newLayer, layerDef.name, groupName);
                     });
                 }
@@ -225,7 +230,6 @@
             }
         }
 
-        // Kjør opplastingsfunksjonen med en gang
         loadWMSConfig();
 
         function updateCRS() {
@@ -262,7 +266,6 @@
                 
                 newLayer.addTo(map);
                 
-                // Manuelle lag havner i gruppen "Ekstra kartlag"
                 layerControl.addOverlay(newLayer, layerName + " (WMS)", "Ekstra kartlag");
 
                 statusDiv.innerText = `Lagt til: ${layerName}`;
