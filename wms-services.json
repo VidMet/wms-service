@@ -58,6 +58,17 @@
         "version": "1.3.0",
         "maxZoom": 22
       }
+    },
+    {
+      "name": "Enkeltminner og sikringssoner",
+      "url": "https://kart.ra.no/wms/kulturminner2?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities",
+      "options": {
+        "layers": "Kulturminner",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
     }
   ]
 }
