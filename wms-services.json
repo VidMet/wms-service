@@ -47,6 +47,17 @@
         "version": "1.3.0",
         "maxZoom": 22
       }
+    },
+    {
+      "name": "SEFRAK-bygninger",
+      "url": "https://kart.ra.no/wms/sefrak?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities",
+      "options": {
+        "layers": "SEFRAKBygninger",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
     }
   ]
 }
