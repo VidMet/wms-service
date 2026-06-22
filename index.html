@@ -74,7 +74,6 @@
         }
         .btn-streetview:hover { background-color: #3367d6; }
 
-        /* Stil for gruppe-overskriftene i menyen */
         .leaflet-control-layers-group-name { font-weight: bold; font-size: 13px; margin-top: 8px; margin-bottom: 3px; color: #0050b5;}
     </style>
 </head>
@@ -85,7 +84,7 @@
             <img src="norconsult-logo-black.png" alt="Norconsult" onerror="this.style.display='none'">
         </div>
         <div class="app-title">
-            <b>Trimble Connect MiniMap v1.23</b>
+            <b>Trimble Connect MiniMap v1.24</b>
             <span>Norconsult Norge</span>
             <em>Developed by Norconsult, AI-assisted development. Kontaktperson: Vidar.Metveit@norconsult.com</em>
         </div>
@@ -99,7 +98,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.23</span>
+            <span class="version-badge">v1.24</span>
         </div>
 
         <div class="control-group">
@@ -173,49 +172,19 @@
         });
         resizeObserver.observe(document.getElementById('map'));
 
-        // --- DEFINERER ALLE KARTLAGENE ---
         var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
         
-        var eiendomLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.matrikkel', {
-            layers: 'eiendomsgrense,eiendoms_id',
-            format: 'image/png', transparent: true, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
-        });
-
-        // Samferdsel: Banenettverk
-        var baneLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.banenettverk', {
-            layers: 'banenettverk',
-            format: 'image/png', transparent: true, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
-        });
-
-        // Samferdsel: Vegnett
-        var vegLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.vegnett2', {
-            layers: 'vegnett2',
-            format: 'image/png', transparent: true, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
-        });
-        
         flyfotoLayer.addTo(map);
 
-        // --- OPPSETT AV GRUPPERT MENY ---
-        // BaseLayers (kun én kan være aktiv av gangen)
+        // --- OPPSETT AV GRUPPERT MENY (KUN BASELAYERS FRA START) ---
         var baseLayers = {
             "Flyfoto": flyfotoLayer, 
             "Vektorkart": osmLayer
         };
-
-        // Overlays organisert i grupper
-        var groupedOverlays = {
-            "Eiendom": {
-                "Eiendomskart (Matrikkel)": eiendomLayer
-            },
-            "Samferdsel": {
-                "Vegnett": vegLayer,
-                "Banenettverk": baneLayer
-            }
-        };
         
-        // Vi bruker nå .groupedLayers i stedet for den standard menyen
-        layerControl = L.control.groupedLayers(baseLayers, groupedOverlays).addTo(map);
+        // Setter opp kontrollen, men lar overlag (overlays) være helt tom i starten
+        layerControl = L.control.groupedLayers(baseLayers, {}).addTo(map);
         
         cameraMarker = L.marker([0,0]).addTo(map);
 
@@ -225,6 +194,39 @@
             if (code === currentModelCRS) option.selected = true;
             selector.appendChild(option);
         }
+
+        // --- NY FUNKSJON: Laster WMS fra wms-services.json ---
+        async function loadWMSConfig() {
+            try {
+                // Legg til en tidsstempel-parameter for å unngå at nettleseren cacher en gammel json-fil
+                const response = await fetch(`wms-services.json?t=${new Date().getTime()}`);
+                if (!response.ok) throw new Error('Fant ikke wms-services.json');
+                
+                const wmsData = await response.json();
+
+                // Går igjennom hver kategori (Eiendom, Samferdsel osv.)
+                for (const [groupName, layers] of Object.entries(wmsData)) {
+                    layers.forEach(layerDef => {
+                        // Sørger for at CRS alltid settes til Web Mercator (Leaflet sin standard)
+                        const layerOptions = Object.assign({}, layerDef.options, {
+                            crs: L.CRS.EPSG3857
+                        });
+                        
+                        // Oppretter kartlaget
+                        const newLayer = L.tileLayer.wms(layerDef.url, layerOptions);
+                        
+                        // Skyter kartlaget inn i riktig gruppe i menyen!
+                        layerControl.addOverlay(newLayer, layerDef.name, groupName);
+                    });
+                }
+                console.log("WMS-tjenester lastet inn fra wms-services.json");
+            } catch (error) {
+                console.warn("Kunne ikke laste forhåndsdefinerte kartlag fra wms-services.json. Sjekk at filen ligger i samme mappe. Feil:", error);
+            }
+        }
+
+        // Kjør opplastingsfunksjonen med en gang
+        loadWMSConfig();
 
         function updateCRS() {
             currentModelCRS = document.getElementById('crs-selector').value;
@@ -260,7 +262,7 @@
                 
                 newLayer.addTo(map);
                 
-                // Magien skjer her: Den skyter automatisk det nye laget inn i en felles gruppe kalt "Ekstra kartlag"
+                // Manuelle lag havner i gruppen "Ekstra kartlag"
                 layerControl.addOverlay(newLayer, layerName + " (WMS)", "Ekstra kartlag");
 
                 statusDiv.innerText = `Lagt til: ${layerName}`;

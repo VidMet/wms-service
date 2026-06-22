@@ -1,0 +1,39 @@
+{
+  "Eiendom": [
+    {
+      "name": "Eiendomskart (Matrikkel)",
+      "url": "https://wms.geonorge.no/skwms1/wms.matrikkel",
+      "options": {
+        "layers": "eiendomsgrense,eiendoms_id",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
+    }
+  ],
+  "Samferdsel": [
+    {
+      "name": "Vegnett",
+      "url": "https://wms.geonorge.no/skwms1/wms.vegnett2",
+      "options": {
+        "layers": "vegnett2",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
+    },
+    {
+      "name": "Banenettverk",
+      "url": "https://wms.geonorge.no/skwms1/wms.banenettverk",
+      "options": {
+        "layers": "banenettverk",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
+    }
+  ]
+}
