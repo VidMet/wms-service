@@ -35,5 +35,18 @@
         "maxZoom": 22
       }
     }
+  ],
+  "Kulturminner": [
+    {
+      "name:" "Freda bygninger",
+      "url": "https://kart.ra.no/wms/freda_bygninger?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities"
+      "options": {
+        "layers": "Freda_bygninger",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
+    }
   ]
 }
