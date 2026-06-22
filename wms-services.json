@@ -15,7 +15,7 @@
       "name": "Høydekurver 1m",
       "url": "https://wms.geonorge.no/skwms1/wms.fkb",
       "options": {
-        "layers": "fkb_hoydekurver_1m",
+        "layers": "hoydekurver_1m",
         "format": "image/png",
         "transparent": true,
         "version": "1.3.0",
@@ -26,7 +26,7 @@
       "name": "Høydekurver 5m",
       "url": "https://wms.geonorge.no/skwms1/wms.fkb",
       "options": {
-        "layers": "fkb_hoydekurver_5m",
+        "layers": "hoydekurver_5m",
         "format": "image/png",
         "transparent": true,
         "version": "1.3.0",

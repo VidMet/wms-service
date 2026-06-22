@@ -84,7 +84,7 @@
             <img src="norconsult-logo-black.png" alt="Norconsult" onerror="this.style.display='none'">
         </div>
         <div class="app-title">
-            <b>Trimble Connect MiniMap v1.25</b>
+            <b>Trimble Connect MiniMap v1.26</b>
             <span>Norconsult Norge</span>
             <em>Developed by Norconsult, AI-assisted development. Kontaktperson: Vidar.Metveit@norconsult.com</em>
         </div>
@@ -98,7 +98,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.25</span>
+            <span class="version-badge">v1.26</span>
         </div>
 
         <div class="control-group">
@@ -175,25 +175,21 @@
         // --- DEFINERER BAKGRUNNSKART ---
         var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
-        
-        // NY: Norges Grunnkart som base layer (bilde er ikke gjennomsiktig)
         var grunnkartLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.norges_grunnkart', {
-            layers: 'Norges_grunnkart',
-            format: 'image/png',
-            transparent: false,
-            version: '1.3.0',
-            crs: L.CRS.EPSG3857,
-            maxZoom: 22
+            layers: 'Norges_grunnkart', format: 'image/png', transparent: false, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
         });
+        
+        // NYTT: Et helt tomt lag for å fjerne bakgrunnen
+        var emptyLayer = L.layerGroup();
         
         flyfotoLayer.addTo(map);
 
         // --- OPPSETT AV GRUPPERT MENY ---
-        // Viser nå Flyfoto, Vektorkart og Grunnkart som radioknapper man kan velge mellom
         var baseLayers = {
             "Flyfoto": flyfotoLayer, 
             "Vektorkart": osmLayer,
-            "Grunnkart": grunnkartLayer
+            "Grunnkart": grunnkartLayer,
+            "Ingen bakgrunn": emptyLayer // Legger til det tomme laget her
         };
         
         layerControl = L.control.groupedLayers(baseLayers, {}).addTo(map);
