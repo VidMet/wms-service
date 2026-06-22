@@ -10,6 +10,17 @@
         "version": "1.3.0",
         "maxZoom": 22
       }
+    },
+    {
+      "name": "INSPIRE Buildings",
+      "url": "https://wms.geonorge.no/skwms1/wms.inspire_bu?service=wms&request=getcapabilities",
+      "options": {
+        "layers": "BU.Building",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
     }
   ],
   "Samferdsel": [
