@@ -21,6 +21,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
     <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-groupedlayercontrol/0.6.1/leaflet.groupedlayercontrol.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-groupedlayercontrol/0.6.1/leaflet.groupedlayercontrol.min.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
 
@@ -28,7 +31,6 @@
         #map { flex-grow: 1; width: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #666; border-top: 1px solid #d1d5db; }
         #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; overflow-y: auto; flex-shrink: 0; }
         
-        /* --- NORCONSULT HEADER STYLING --- */
         .topbar {
             height: auto; background: #fff; 
             display: flex; align-items: center; gap: 15px; padding: 10px 15px; flex: 0 0 auto;
@@ -50,10 +52,9 @@
             .logo-card { width: 100px; height: 45px; }
             .app-title b { font-size: 14px; }
             .app-title span { font-size: 11px; }
-            .app-title em { display: none; } /* Skjuler e-posten hvis panelet er smalt */
+            .app-title em { display: none; } 
         }
 
-        /* --- KONTROLLPANEL STYLING --- */
         .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px; }
         .version-badge { background: #005A9E; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; font-family: 'JetBrains Mono', monospace;}
         .control-group { margin-bottom: 10px; }
@@ -72,6 +73,9 @@
             transition: background-color 0.2s;
         }
         .btn-streetview:hover { background-color: #3367d6; }
+
+        /* Stil for gruppe-overskriftene i menyen */
+        .leaflet-control-layers-group-name { font-weight: bold; font-size: 13px; margin-top: 8px; margin-bottom: 3px; color: #0050b5;}
     </style>
 </head>
 <body>
@@ -81,7 +85,7 @@
             <img src="norconsult-logo-black.png" alt="Norconsult" onerror="this.style.display='none'">
         </div>
         <div class="app-title">
-            <b>Trimble Connect MiniMap v1.22</b>
+            <b>Trimble Connect MiniMap v1.23</b>
             <span>Norconsult Norge</span>
             <em>Developed by Norconsult, AI-assisted development. Kontaktperson: Vidar.Metveit@norconsult.com</em>
         </div>
@@ -95,7 +99,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.22</span>
+            <span class="version-badge">v1.23</span>
         </div>
 
         <div class="control-group">
@@ -108,13 +112,13 @@
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
-            <strong>2. Legg til WMS (Kartbilde):</strong>
+            <strong>2. Legg til ekstra WMS (Kartbilde):</strong>
             <div class="input-group">
                 <input type="text" id="wms-url" placeholder="Lim inn URL...">
                 <input type="text" id="wms-layer" placeholder="Lagnavn">
                 <button onclick="addCustomWMS()">Legg til</button>
             </div>
-            <div id="wms-status" style="font-size: 11px; color: #666; margin-top: 3px; word-break: break-all;"></div>
+            <div id="wms-status" style="font-size: 11px; color: #666; margin-top: 3px; word-break: break-all;">Lagt til i gruppen "Ekstra kartlag" i menyen.</div>
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
@@ -169,24 +173,49 @@
         });
         resizeObserver.observe(document.getElementById('map'));
 
+        // --- DEFINERER ALLE KARTLAGENE ---
         var flyfotoLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
         var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
         
         var eiendomLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.matrikkel', {
             layers: 'eiendomsgrense,eiendoms_id',
-            format: 'image/png',
-            transparent: true,
-            version: '1.3.0',
-            crs: L.CRS.EPSG3857,
-            maxZoom: 22
+            format: 'image/png', transparent: true, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
+        });
+
+        // Samferdsel: Banenettverk
+        var baneLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.banenettverk', {
+            layers: 'banenettverk',
+            format: 'image/png', transparent: true, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
+        });
+
+        // Samferdsel: Vegnett
+        var vegLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.vegnett2', {
+            layers: 'vegnett2',
+            format: 'image/png', transparent: true, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
         });
         
         flyfotoLayer.addTo(map);
+
+        // --- OPPSETT AV GRUPPERT MENY ---
+        // BaseLayers (kun én kan være aktiv av gangen)
+        var baseLayers = {
+            "Flyfoto": flyfotoLayer, 
+            "Vektorkart": osmLayer
+        };
+
+        // Overlays organisert i grupper
+        var groupedOverlays = {
+            "Eiendom": {
+                "Eiendomskart (Matrikkel)": eiendomLayer
+            },
+            "Samferdsel": {
+                "Vegnett": vegLayer,
+                "Banenettverk": baneLayer
+            }
+        };
         
-        layerControl = L.control.layers(
-            { "Flyfoto": flyfotoLayer, "Vektorkart": osmLayer }, 
-            { "Eiendomskart (Matrikkel)": eiendomLayer }
-        ).addTo(map);
+        // Vi bruker nå .groupedLayers i stedet for den standard menyen
+        layerControl = L.control.groupedLayers(baseLayers, groupedOverlays).addTo(map);
         
         cameraMarker = L.marker([0,0]).addTo(map);
 
@@ -230,7 +259,9 @@
                 });
                 
                 newLayer.addTo(map);
-                layerControl.addOverlay(newLayer, layerName + " (WMS)");
+                
+                // Magien skjer her: Den skyter automatisk det nye laget inn i en felles gruppe kalt "Ekstra kartlag"
+                layerControl.addOverlay(newLayer, layerName + " (WMS)", "Ekstra kartlag");
 
                 statusDiv.innerText = `Lagt til: ${layerName}`;
                 statusDiv.style.color = "green";
