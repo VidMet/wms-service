@@ -1,4 +1,17 @@
 {
+  "Grunnlag": [
+    {
+      "name": "Felles Kartdatabase (FKB)",
+      "url": "https://wms.geonorge.no/skwms1/wms.fkb",
+      "options": {
+        "layers": "fkb",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "maxZoom": 22
+      }
+    }
+  ],
   "Eiendom": [
     {
       "name": "Eiendomskart (Matrikkel)",
