@@ -75,6 +75,35 @@
         .btn-streetview:hover { background-color: #3367d6; }
 
         .leaflet-control-layers-group-name { font-weight: bold; font-size: 13px; margin-top: 8px; margin-bottom: 3px; color: #0050b5;}
+
+        /* --- STIL FOR TEGNFORKLARING (LEGEND) --- */
+        .info.legend {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+            max-height: 350px;
+            overflow-y: auto;
+            display: none; /* Skjult helt til et lag skrus på */
+            color: #333;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .info.legend h4 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: #0050b5;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 4px;
+        }
+        .legend-item {
+            margin-bottom: 12px;
+        }
+        .legend-item strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #111;
+        }
     </style>
 </head>
 <body>
@@ -84,7 +113,7 @@
             <img src="norconsult-logo-black.png" alt="Norconsult" onerror="this.style.display='none'">
         </div>
         <div class="app-title">
-            <b>Trimble Connect MiniMap v1.26</b>
+            <b>Trimble Connect MiniMap v1.27</b>
             <span>Norconsult Norge</span>
             <em>Developed by Norconsult, AI-assisted development. Kontaktperson: Vidar.Metveit@norconsult.com</em>
         </div>
@@ -98,7 +127,7 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            <span class="version-badge">v1.26</span>
+            <span class="version-badge">v1.27</span>
         </div>
 
         <div class="control-group">
@@ -178,23 +207,89 @@
         var grunnkartLayer = L.tileLayer.wms('https://wms.geonorge.no/skwms1/wms.norges_grunnkart', {
             layers: 'Norges_grunnkart', format: 'image/png', transparent: false, version: '1.3.0', crs: L.CRS.EPSG3857, maxZoom: 22
         });
-        
-        // NYTT: Et helt tomt lag for å fjerne bakgrunnen
         var emptyLayer = L.layerGroup();
         
         flyfotoLayer.addTo(map);
 
-        // --- OPPSETT AV GRUPPERT MENY ---
         var baseLayers = {
             "Flyfoto": flyfotoLayer, 
             "Vektorkart": osmLayer,
             "Grunnkart": grunnkartLayer,
-            "Ingen bakgrunn": emptyLayer // Legger til det tomme laget her
+            "Ingen bakgrunn": emptyLayer 
         };
         
         layerControl = L.control.groupedLayers(baseLayers, {}).addTo(map);
-        
         cameraMarker = L.marker([0,0]).addTo(map);
+
+        // --- TEGNFORKLARING (LEGEND) KONTROLL ---
+        var legendControl = L.control({position: 'bottomright'});
+        var activeLegends = {}; 
+
+        legendControl.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info legend');
+            this._div.innerHTML = '<h4>Tegnforklaring</h4><div id="legend-content"></div>';
+            
+            // Unngå at klikk eller skrolling i boksen påvirker kartet under
+            L.DomEvent.disableClickPropagation(this._div);
+            L.DomEvent.disableScrollPropagation(this._div);
+
+            return this._div;
+        };
+
+        legendControl.addTo(map);
+
+        // Oppdaterer innholdet i tegnforklaringsboksen
+        function updateLegendDisplay() {
+            const contentDiv = document.getElementById('legend-content');
+            if (!contentDiv) return;
+
+            contentDiv.innerHTML = '';
+            const keys = Object.keys(activeLegends);
+
+            if (keys.length === 0) {
+                legendControl._div.style.display = 'none'; // Skjul boksen hvis den er tom
+            } else {
+                legendControl._div.style.display = 'block'; // Vis boksen
+                keys.forEach(key => {
+                    const legendHtml = activeLegends[key];
+                    contentDiv.innerHTML += `<div class="legend-item"><strong>${key}</strong>${legendHtml}</div>`;
+                });
+            }
+        }
+
+        // Fanger opp at brukeren SKRUR PÅ et kartlag i menyen
+        map.on('overlayadd', function(eventLayer) {
+            // Sjekk at det faktisk er et WMS-lag
+            if (eventLayer.layer instanceof L.TileLayer.WMS) {
+                const baseUrl = eventLayer.layer._url;
+                const layersParam = eventLayer.layer.wmsParams.layers;
+                
+                // Mange WMS-tjenester tar imot flere lagnavn atskilt med komma. 
+                // Vi lager en tegnforklaring for hvert av dem.
+                const layerNames = layersParam.split(',');
+                let legendImagesHtml = '';
+
+                layerNames.forEach(layerName => {
+                    // Det magiske kallet til WMS-serveren (GetLegendGraphic)
+                    const legendUrl = `${baseUrl}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=${layerName.trim()}`;
+                    
+                    // onerroren sørger for at ødelagte/tomme bilder bare skjules i stedet for å vise et kryss
+                    legendImagesHtml += `<img src="${legendUrl}" onerror="this.style.display='none'" style="max-width:100%; margin-top:4px;"><br>`;
+                });
+
+                activeLegends[eventLayer.name] = legendImagesHtml;
+                updateLegendDisplay();
+            }
+        });
+
+        // Fanger opp at brukeren SKRUR AV et kartlag i menyen
+        map.on('overlayremove', function(eventLayer) {
+            if (activeLegends[eventLayer.name]) {
+                delete activeLegends[eventLayer.name];
+                updateLegendDisplay();
+            }
+        });
+
 
         const selector = document.getElementById('crs-selector');
         for (const [code, data] of Object.entries(crsConfig)) {
