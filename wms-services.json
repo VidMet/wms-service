@@ -97,6 +97,7 @@
         "layers": "Hele_Hierarkiet",
         "format": "image/png",
         "transparent": true,
+        "maxZoom": 22,
         "attribution": "NVE"
       }
     },
@@ -107,6 +108,7 @@
         "layers": "Hele_Hierarkiet",
         "format": "image/png",
         "transparent": true,
+        "maxZoom": 22,
         "attribution": "NVE"
       }
     }
