@@ -47,21 +47,24 @@
         .app-title span { font-size: 13px; font-weight: 600; color: #111827; }
         .app-title em { font-size: 11px; color: #6b7280; font-style: normal; margin-top: 2px;}
 
-        @media(max-width:500px) {
+        /* Wrapper for høyrestilt innhold i topbar */
+        .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+        @media(max-width:650px) {
             .topbar { padding: 8px; flex-wrap: wrap; gap: 10px;}
             .logo-card { width: 100px; height: 45px; }
             .app-title b { font-size: 14px; }
             .app-title span { font-size: 11px; }
             .app-title em { display: none; } 
+            .topbar-right { margin-left: 0; width: 100%; justify-content: flex-start; }
         }
 
         .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px; }
-        .version-badge { background: #005A9E; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; font-family: 'JetBrains Mono', monospace;}
+        .version-badge { background: #005A9E; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; font-family: 'JetBrains Mono', monospace;}
         
-        /* Ny knapp for brukerveiledning */
         .btn-manual {
             font-size: 11px; color: #0050b5; text-decoration: none; font-weight: bold;
-            background: #e0eaff; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;
+            background: #e0eaff; padding: 5px 10px; border-radius: 4px; transition: background 0.2s;
             display: inline-flex; align-items: center; gap: 4px;
         }
         .btn-manual:hover { background: #c3d9ff; }
@@ -106,9 +109,16 @@
             <img src="norconsult-logo-black.png" alt="Norconsult" onerror="this.style.display='none'">
         </div>
         <div class="app-title">
-            <b>Trimble Connect MiniMap v1.29</b>
+            <b>Trimble Connect MiniMap</b>
             <span>Norconsult Norge</span>
             <em>Developed by Norconsult, AI-assisted development. Kontaktperson: Vidar.Metveit@norconsult.com</em>
+        </div>
+        
+        <div class="topbar-right">
+            <span class="version-badge">v1.30</span>
+            <a href="https://github.com/VidMet/wms-service/blob/main/README.md" target="_blank" class="btn-manual">
+                📖 Brukerveiledning
+            </a>
         </div>
     </header>
 
@@ -120,22 +130,11 @@
                 <span id="api-status" class="status-dot"></span>
                 <strong id="api-text">Venter på Trimble API...</strong>
             </div>
-            
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <a href="https://github.com/VidMet/wms-service/blob/main/README.md" target="_blank" class="btn-manual">
-                    📖 Brukerveiledning
-                </a>
-                <span class="version-badge">v1.29</span>
-            </div>
         </div>
 
         <div class="control-group">
             <strong>1. Prosjektets koordinatsystem:</strong><br>
             <select id="crs-selector" onchange="updateCRS()" style="margin-top: 5px; width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 4px;"></select>
-        </div>
-        
-        <div class="control-group">
-            <label><input type="checkbox" id="use-target" onchange="forceSync()" checked> <strong>Bruk siktlinje (senter)</strong></label>
         </div>
 
         <div class="control-group" style="border-top: 1px solid #ddd; padding-top: 10px;">
@@ -470,8 +469,8 @@
                         const cameraData = payload.data;
                         if (!cameraData) return;
 
-                        const useTarget = document.getElementById('use-target').checked;
-                        const cameraPoint = (useTarget && cameraData.lookAt) ? cameraData.lookAt : cameraData.position;
+                        // Siktlinjen (lookAt) er nå standard. Hvis lookAt av en eller annen grunn mangler fra APIet, faller den trygt tilbake på posisjon.
+                        const cameraPoint = cameraData.lookAt ? cameraData.lookAt : cameraData.position;
 
                         if (cameraPoint && cameraPoint.x !== undefined) {
                             const x_meter = cameraPoint.x;
