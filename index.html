@@ -115,7 +115,7 @@
         </div>
         
         <div class="topbar-right">
-            <span class="version-badge">v1.30</span>
+            <span class="version-badge">v1.31</span>
             <a href="https://github.com/VidMet/wms-service/blob/main/README.md" target="_blank" class="btn-manual">
                 📖 Brukerveiledning
             </a>
@@ -300,7 +300,6 @@
 
         async function loadWMSConfig() {
             try {
-                // Henter wms-services.json som inneholder standardlagene for kartet
                 const response = await fetch(`wms-services.json?t=${new Date().getTime()}`);
                 if (!response.ok) throw new Error('Fant ikke wms-services.json');
                 
@@ -428,7 +427,8 @@
                 const lon = wgs84Coords[0];
                 const lat = wgs84Coords[1];
 
-                const svUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$${lat},${lon}`;
+                // Oppdatert til offisiell URL-struktur for Google Maps Street View
+                const svUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
                 window.open(svUrl, '_blank');
             } catch (error) {
                 console.error("Feil ved generering av Street View-lenke:", error);
@@ -469,7 +469,7 @@
                         const cameraData = payload.data;
                         if (!cameraData) return;
 
-                        // Siktlinjen (lookAt) er nå standard. Hvis lookAt av en eller annen grunn mangler fra APIet, faller den trygt tilbake på posisjon.
+                        // Siktlinjen (lookAt) er standard. Hvis lookAt mangler, faller den tilbake på posisjon.
                         const cameraPoint = cameraData.lookAt ? cameraData.lookAt : cameraData.position;
 
                         if (cameraPoint && cameraPoint.x !== undefined) {
