@@ -94,18 +94,7 @@
       "name": "Nedbørsfelt",
       "url": "https://kart.nve.no/enterprise/services/Nedborfelt2/MapServer/WMSServer?request=GetCapabilities&service=WMS",
       "options": {
-        "layers": "Hele_Hierarkiet",
-        "format": "image/png",
-        "transparent": true,
-        "maxZoom": 22,
-        "attribution": "NVE"
-      }
-    },
-    {
-      "name": "Hydrologiske data",
-      "url": "https://kart.nve.no/enterprise/services/Nedborfelt2/MapServer/WMSServer?request=GetCapabilities&service=WMS",
-      "options": {
-        "layers": "Hele_Hierarkiet",
+        "layers": "Hovedfelt_Nedborfelt_til_hav,Sidenedborfelt,REGINE_enhet,Vassdragsomrade",
         "format": "image/png",
         "transparent": true,
         "maxZoom": 22,
