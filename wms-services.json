@@ -91,17 +91,6 @@
   ],
   "NVE": [
     {
-      "name": "Nedbørsfelt",
-      "url": "https://kart.nve.no/enterprise/services/Nedborfelt2/MapServer/WMSServer?request=GetCapabilities&service=WMS",
-      "options": {
-        "layers": "Hovedfelt_Nedborfelt_til_hav,Sidenedborfelt,REGINE_enhet,Vassdragsomrade",
-        "format": "image/png",
-        "transparent": true,
-        "maxZoom": 22,
-        "attribution": "NVE"
-      }
-    },
-    {
       "name": "Kvikkleireskred",
       "url": "https://kart.nve.no/enterprise/services/SkredKvikkleire2/MapServer/WMSServer",
       "options": {
