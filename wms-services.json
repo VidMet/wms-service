@@ -88,5 +88,17 @@
         "attribution": "Riksantikvaren"
       }
     }
+  ],
+  "NVE": [
+    {
+      "name": "Nedbørsfelt",
+      "url": "http://gis3.nve.no/map/services/Nedborfelt/MapServer/WmsServer?",
+      "options": {
+        "layers": "Vassdragsomrade,Nedborfelt til hav",
+        "format": "image/png",
+        "transparent": true,
+        "attribution": "NVE"
+      }
+    }
   ]
 }
