@@ -25,6 +25,17 @@
       }
     }
   ],
+  "Plankart": [
+    {
+      "name": "Reguleringsplaner",
+      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplaner/?service=WMS&request=GetCapabilities",
+      "options": {
+        "layers": "bebyggelsesplan_vn2",
+        "transparent": true,
+        "format": "image/png",
+      }
+    }
+  ]
   "Samferdsel": [
     {
       "name": "Vegnett",
