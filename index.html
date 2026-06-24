@@ -27,9 +27,20 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
 
-        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #f3f4f6;}
-        #map { flex-grow: 1; width: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #666; border-top: 1px solid #d1d5db; }
-        #ui-panel { padding: 10px; background: #f8f9fa; border-top: 1px solid #ccc; font-size: 14px; overflow-y: auto; flex-shrink: 0; }
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #f3f4f6; overflow: hidden;}
+        
+        #map { flex-grow: 1; width: 100%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #666; border-top: 1px solid #d1d5db; min-height: 100px;}
+        
+        /* --- NYTT: Justeringshåndtak (Resizer) --- */
+        #resizer {
+            height: 12px; background: #e5e7eb; cursor: ns-resize;
+            display: flex; align-items: center; justify-content: center;
+            border-top: 1px solid #ccc; border-bottom: 1px solid #ccc;
+            flex-shrink: 0; z-index: 1000;
+        }
+        .drag-line { width: 40px; height: 3px; background: #9ca3af; border-radius: 2px; }
+        
+        #ui-panel { padding: 10px; background: #f8f9fa; font-size: 14px; overflow-y: auto; flex-shrink: 0; height: auto; min-height: 60px;}
         
         .topbar {
             height: auto; background: #fff; 
@@ -47,7 +58,6 @@
         .app-title span { font-size: 13px; font-weight: 600; color: #111827; }
         .app-title em { font-size: 11px; color: #6b7280; font-style: normal; margin-top: 2px;}
 
-        /* Wrapper for høyrestilt innhold i topbar */
         .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 
         @media(max-width:650px) {
@@ -75,7 +85,6 @@
         input[type="text"] { flex-grow: 1; min-width: 120px; border: 1px solid #ccc; border-radius: 4px; }
         button { border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
         button:hover { background: #eee; }
-        label { cursor: pointer; }
         .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: red; margin-right: 5px; }
         .status-dot.connected { background-color: #22a06b; }
         
@@ -88,10 +97,16 @@
 
         .leaflet-control-layers-group-name { font-weight: bold; font-size: 13px; margin-top: 8px; margin-bottom: 3px; color: #0050b5;}
 
+        /* --- SIKRER AT MENYEN KAN RULLES PÅ SMÅ SKJERMER --- */
+        .leaflet-control-layers-expanded {
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
         /* --- STIL FOR TEGNFORKLARING --- */
         .info.legend {
             background: white; padding: 10px; border-radius: 5px;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.4); max-height: 350px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4); max-height: 40vh; /* Begrenser også legend-høyden */
             overflow-y: auto; display: none; color: #333; font-size: 12px; line-height: 1.4;
         }
         .info.legend h4 {
@@ -115,7 +130,7 @@
         </div>
         
         <div class="topbar-right">
-            <span class="version-badge">v1.31</span>
+            <span class="version-badge">v1.32</span>
             <a href="https://github.com/VidMet/wms-service/blob/main/README.md" target="_blank" class="btn-manual">
                 📖 Brukerveiledning
             </a>
@@ -123,6 +138,10 @@
     </header>
 
     <div id="map">Laster kartbiblioteker...</div>
+    
+    <div id="resizer">
+        <div class="drag-line"></div>
+    </div>
 
     <div id="ui-panel">
         <div class="header-row">
@@ -179,6 +198,57 @@
         let map, cameraMarker, layerControl;
         let searchMarker = null; 
 
+        // --- RESIZER LOGIKK ---
+        const resizer = document.getElementById('resizer');
+        const uiPanel = document.getElementById('ui-panel');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'ns-resize';
+            uiPanel.style.flex = 'none'; // Frigjør panelet fra auto-størrelse
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            // Beregner ny høyde basert på musens posisjon vs vinduets bunn
+            let newHeight = window.innerHeight - e.clientY;
+            
+            // Sikkerhetsgrenser så man ikke drar skjermen helt i stykker
+            if (newHeight < 60) newHeight = 60;
+            if (newHeight > window.innerHeight - 150) newHeight = window.innerHeight - 150; 
+            
+            uiPanel.style.height = newHeight + 'px';
+            
+            // Tvinger kartet til å regne ut størrelsen sin på nytt
+            if(map) map.invalidateSize(); 
+        });
+
+        document.addEventListener('mouseup', () => {
+            if(isResizing) {
+                isResizing = false;
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        // Touch-støtte for nettbrett/mobil
+        resizer.addEventListener('touchstart', (e) => {
+            isResizing = true;
+            uiPanel.style.flex = 'none';
+        }, {passive: true});
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isResizing) return;
+            let newHeight = window.innerHeight - e.touches[0].clientY;
+            if (newHeight < 60) newHeight = 60;
+            if (newHeight > window.innerHeight - 150) newHeight = window.innerHeight - 150;
+            uiPanel.style.height = newHeight + 'px';
+            if(map) map.invalidateSize();
+        }, {passive: true});
+
+        document.addEventListener('touchend', () => { isResizing = false; });
+
+
         const crsConfig = {
             "EPSG:25832": { name: "EUREF89 UTM Sone 32N", projString: "+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" },
             "EPSG:25833": { name: "EUREF89 UTM Sone 33N", projString: "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" }
@@ -219,8 +289,9 @@
         layerControl = L.control.groupedLayers(baseLayers, {}).addTo(map);
         cameraMarker = L.marker([0,0]).addTo(map);
 
-        // --- ASYNKRON TEGNFORKLARING (LEGEND) KONTROLL ---
-        var legendControl = L.control({position: 'bottomright'});
+        // --- ASYNKRON TEGNFORKLARING ---
+        // Legend er nå flyttet til bottomleft for å aldri kollidere med menyen!
+        var legendControl = L.control({position: 'bottomleft'});
         var activeLegends = {}; 
 
         legendControl.onAdd = function (map) {
@@ -427,7 +498,6 @@
                 const lon = wgs84Coords[0];
                 const lat = wgs84Coords[1];
 
-                // Oppdatert til offisiell URL-struktur for Google Maps Street View
                 const svUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
                 window.open(svUrl, '_blank');
             } catch (error) {
@@ -469,7 +539,6 @@
                         const cameraData = payload.data;
                         if (!cameraData) return;
 
-                        // Siktlinjen (lookAt) er standard. Hvis lookAt mangler, faller den tilbake på posisjon.
                         const cameraPoint = cameraData.lookAt ? cameraData.lookAt : cameraData.position;
 
                         if (cameraPoint && cameraPoint.x !== undefined) {
