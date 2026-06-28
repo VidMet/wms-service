@@ -36,17 +36,8 @@
       }
     },
     {
-      "name": "Vertikalnivå 1",
-      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplaner",
-      "options": {
-        "layers": "vertikalnivå_1",
-        "format": "image/png",
-        "transparent": true
-      }
-    },
-    {
-      "name": "Vertikalnivå 2",
-      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplaner",
+      "name": "Reguleringsplanforslag",
+      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplanforslag",
       "options": {
         "layers": "vertikalnivå_2",
         "format": "image/png",
@@ -54,28 +45,19 @@
       }
     },
     {
-      "name": "Vertikalnivå 3",
-      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplaner",
+      "name": "Kommuneplanforslag",
+      "url": "https://nap.ft.dibk.no/services/wms/kommuneplanforslag",
       "options": {
-        "layers": "vertikalnivå_3",
+        "layers": "kommuneplanforslag",
         "format": "image/png",
         "transparent": true
       }
     },
     {
-      "name": "Vertikalnivå 4",
-      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplaner",
+      "name": "Kommuneplaner",
+      "url": "https://nap.ft.dibk.no/services/wms/kommuneplaner",
       "options": {
-        "layers": "vertikalnivå_4",
-        "format": "image/png",
-        "transparent": true
-      }
-    },
-    {
-      "name": "Vertikalnivå 5",
-      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplaner",
-      "options": {
-        "layers": "vertikalnivå_5",
+        "layers": "kommuneplaner",
         "format": "image/png",
         "transparent": true
       }
