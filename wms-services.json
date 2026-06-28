@@ -25,6 +25,17 @@
       }
     }
   ],
+  "Planer": [
+    {
+      "name": "Reguleringsplan Vn2",
+      "url": "https://nap.ft.dibk.no/services/wms/reguleringsplaner",
+      "options": {
+        "layers": "bebyggelsesplan_vn2",
+        "format": "image/png",
+        "transparent": true
+      }
+    }
+  ],
   "Samferdsel": [
     {
       "name": "Vegnett",
